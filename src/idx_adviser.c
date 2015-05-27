@@ -89,6 +89,7 @@ static List* build_composite_candidates( List* l1, List* l2 );
 static List* remove_irrelevant_candidates( List* candidates );
 static void tag_and_remove_candidates(Cost startupCostSaved, 
 									  Cost totalCostSaved, 
+									  PlannedStmt *new_plan,
 									  const Node* const head,
 									  List* const candidates);
 static void mark_used_candidates(	const Node* const plan,
@@ -486,7 +487,7 @@ static PlannedStmt* index_adviser(	Query*			queryCopy,
 	totalCostSaved = actualTotalCost - newTotalCost;
 
 	
-	tag_and_remove_candidates(startupCostSaved, totalCostSaved,  (Node*)new_plan->planTree, candidates);
+	tag_and_remove_candidates(startupCostSaved, totalCostSaved, new_plan, (Node*)new_plan->planTree, candidates);
 /*	
 	if( startupCostSaved >0 || totalCostSaved > 0 )
 	{
@@ -1528,7 +1529,7 @@ static List* remove_irrelevant_candidates( List* candidates )
  *    tag every candidate we do use and remove those unneeded
  * Note: should i really remove or wait for cleanup?.
  */
-static void tag_and_remove_candidates(Cost startupCostSaved, Cost totalCostSaved, const Node* const head,List* const candidates)
+static void tag_and_remove_candidates(Cost startupCostSaved, Cost totalCostSaved,PlannedStmt		*new_plan, const Node* const head,List* const candidates)
 {
 	
 	if( startupCostSaved >0 || totalCostSaved > 0 )
