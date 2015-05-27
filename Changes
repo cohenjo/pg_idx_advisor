@@ -1,0 +1,8 @@
+Revision history for PostgreSQL extension pg_idx_advisor.
+
+
+0.1.0  2015-05-27 11:47:43
+      - Initial version.
+      - Implementation in C.
+      - Included in [PGXN Manager](https://github.com/theory/pgxn-manager).
+      - Not otherwise released.

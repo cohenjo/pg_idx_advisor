@@ -1,0 +1,55 @@
+{
+   "name": "pg_idx_advisor",
+   "abstract": "Index advice for PostgreSQL",
+   "description": "pg_idx_advisor is a PostgreSQL extension that gives index tuning recommendations for queries.",
+   "version": "0.1.0",
+   "release_status": "testing",
+   "maintainer": [
+      "Jony V. Cohen <jony.cohenjo@gmail.com>"      
+   ],
+   "license": {
+      "PostgreSQL": "http://www.postgresql.org/about/licence"
+   },
+   "prereqs": {
+      "runtime": {
+         "requires": {
+            "plpgsql": 0,
+            "PostgreSQL": "9.2.0"
+         },
+         "recommends": {
+            "PostgreSQL": "9.4.0"
+         }
+      }
+   },
+   "provides": {
+     "idx_adv": {
+       "file": "pg_idx_advisor.so",
+       "docfile": "doc/README.md",
+       "version": "0.1.0",
+       "abstract": "Index advice for PostgreSQL"
+     }
+   },
+   "resources": {
+      "homepage": "https://github.com/cohenjo/pg_idx_advisor",
+      "bugtracker": {
+         "web": "http://github.com/cohenjo/pg_idx_advisor/issues"
+      },
+      "repository": {
+        "url":  "https://github.com/cohenjo/pg_idx_advisor.git",
+        "web":  "https://github.com/cohenjo/pg_idx_advisor",
+        "type": "git"
+      }
+   },
+   "generated_by": "Jony V. cohen",
+   "meta-spec": {
+      "version": "1.0.0",
+      "url": "http://pgxn.org/meta/spec.txt"
+   },
+   "tags": [
+      "tuning",
+      "performance",
+      "index",
+      "advisor",
+      "query tuning"
+   ]
+}
