@@ -802,6 +802,8 @@ ExplainOneQuery_callback(Query	*query,  IntoClause *into,
  *  indexlist   list of IndexOptInfos for relation's indexes
  *  pages       number of pages
  *  tuples      number of tuples
+ *
+ * BUG: this fails if we have actual data in the table - must fix.
  */
 static void get_relation_info_callback(	PlannerInfo	*root,
 				Oid		relationObjectId,
@@ -1071,9 +1073,9 @@ static void get_relation_info_callback(	PlannerInfo	*root,
 	}
         heap_close(relation, NoLock);
 	rel->indexlist = indexinfos;
-	elog( DEBUG1, "IND ADV: get_relation_info_callback: cand list length %d",list_length(rel->indexlist));
+	elog( DEBUG1, "IDX ADV: get_relation_info_callback: cand list length %d",list_length(rel->indexlist));
 
-    elog( DEBUG1, "IND ADV: get_relation_info_callback: EXIT");
+    elog( DEBUG1, "IDX ADV: get_relation_info_callback: EXIT");
 }
 
 /* Use this function to reset the hooks that are required to be registered only
@@ -2176,8 +2178,7 @@ static bool index_candidates_walker (Node *root, ScanContext *context)
 					cand->varlevelsup   = expr->varlevelsup;
 					cand->ncols         = 1;
 					cand->reloid        = rte->relid;
-					cand->erefAlias     = pstrdup(rte->eref->aliasname);
-					cand->idxused       = false;
+					cand->erefAlias     = pstrdup(rte->eref->aliasname);					
 					cand->inh			= rte->inh;
 					elog( DEBUG3 , "index candidate - rel: %s, inh: %s",cand->erefAlias,BOOL_FMT(rte->inh));
 					cand->vartype[ 0 ]  = expr->vartype;
