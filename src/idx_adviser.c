@@ -159,7 +159,6 @@ static List* index_candidates;
 static List* table_clauses;
 
 /*! Holds the advisor configuration */
-static Configuration* config;
 static bool idxadv_read_only;
 static bool idxadv_text_pattern_ops;
 static char *idxadv_columns;
@@ -248,7 +247,6 @@ void _PG_init(void)
 	ExplainOneQuery_hook = ExplainOneQuery_callback;
 	prev_planner = planner_hook;
 	planner_hook = planner_callback;
-	//envVar = "/etc/sysconfig/pgsql/config.ini";
 
 	/* We dont need to reset the state here since the contrib module has just been
 	 * loaded; FIXME: consider removing this call.
@@ -261,7 +259,6 @@ void _PG_init(void)
 /* PG calls this func when un-loading the plugin (if ever) */
 void _PG_fini(void)
 {
-	pfree(config);
     /* Uninstall hooks. */
 	planner_hook = prev_planner;
 	ExplainOneQuery_hook = prev_ExplainOneQuery;
@@ -347,20 +344,6 @@ static PlannedStmt* index_adviser(	Query*			queryCopy,
 	table_clauses = NIL;
 	
 
-	//config = parse_config_file(envVar, idxadv_columns,idxadv_text_pattern_ops, idxadv_composit_max_cols, idxadv_read_only);
-	//config = parse_config_file(envVar);
-	if(config != NULL)
-	{
-		elog(DEBUG3, "config cols: %s",config->partQlauseCol);
-		if(config->text_pattern_ops)
-			elog(DEBUG3, "config->text_pattern_ops true");		
-		else
-			elog(DEBUG3, "config->text_pattern_ops false");		
-	}
-	else
-		elog(WARNING, "config cols: didn't load");
-
-
 	/* get the costs without any virtual index */
 	actualStartupCost	= actual_plan->planTree->startup_cost;
 	actualTotalCost		= actual_plan->planTree->total_cost;
@@ -426,7 +409,9 @@ static PlannedStmt* index_adviser(	Query*			queryCopy,
 	 * adviser). By setting up our own SPI frame here, we make sure that
 	 * AtEOSubXact_SPI() frees this frame's memory.
 	 */
-	elog( DEBUG1, "SPI connection start");
+	elog( DEBUG1, "About to call SPI connect - push SPI first");
+        //SPI_push();
+	elog( DEBUG1, "SPI connection start - TODO FIX THIS!!");
 	if( SPI_connect() != SPI_OK_CONNECT )
 	{
 		elog( WARNING, "IND ADV: SPI_connect() call failed - pre virtual index creation." );		
@@ -853,17 +838,23 @@ static void get_relation_info_callback(	PlannerInfo	*root,
 		info->indexcollations = (Oid *) palloc(sizeof(Oid) * ncolumns);
 		info->opfamily = (Oid *) palloc(sizeof(Oid) * ncolumns);
 		info->opcintype = (Oid *) palloc(sizeof(Oid) * ncolumns);
+                info->canreturn = (bool *) palloc(sizeof(bool) * ncolumns);
 		elog( DEBUG3, "IND ADV: get_relation_info_callback: index oid: %d, ncols: %d",indexoid,ncolumns);
 		
 		for (i = 0; i < ncolumns; i++)
 		{
+                        elog( DEBUG3, "IDX_ADV: column %d  ",i);
 			info->indexkeys[i] = index->indkey.values[i];
 			if(info->indexkeys[i] != 0)
 				simpleColumns +=1;
 			info->indexcollations[i] = indexRelation->rd_indcollation[i]; //InvalidOid;			
 			info->opfamily[i] = indexRelation->rd_opfamily[i];
 			info->opcintype[i] = indexRelation->rd_opcintype[i];
+#if PG_VERSION_NUM >= 90500
+			info->canreturn[i] = index_can_return(indexRelation, i + 1);
+#endif
 		}
+                elog( DEBUG3, "IDX_ADV: done with per column  ");
 		for (; i < INDEX_MAX_KEYS; i++)
 		{
 			info->indexkeys[i] = 0;			
@@ -877,7 +868,9 @@ static void get_relation_info_callback(	PlannerInfo	*root,
 			elog( DEBUG4 ,"IND ADV: need to figure out the right valuse for amcostestimate");
 			info->amcostestimate=(RegProcedure)1268; //btcostestimate
 		}
+#if PG_VERSION_NUM < 90500
 		info->canreturn = index_can_return(indexRelation);
+#endif
 		info->amcanorderbyop = indexRelation->rd_am->amcanorderbyop;
 		//info->amoptionalkey = indexRelation->rd_am->amoptionalkey;
 		info->amsearcharray = indexRelation->rd_am->amsearcharray;
@@ -896,8 +889,10 @@ static void get_relation_info_callback(	PlannerInfo	*root,
 
 		/*
 		* Fetch the ordering information for the index, if any.
-		*/		
-		if (info->relam == BTREE_AM_OID)
+		*/
+                // TODO: how to handle non BTREE ops (support other index types, see: get_relation_info: plancat.c:88)		
+		//if (info->relam == BTREE_AM_OID)
+		if ( 1 == 1)
 		{
 			elog( DEBUG3 , "IND ADV: in BTREE_AM_OID");
 			/*
@@ -1025,7 +1020,7 @@ static void get_relation_info_callback(	PlannerInfo	*root,
 				elog( DEBUG4, "IND ADV: get_relation_info_callback:  pallocate mem for vardata, size: %ld",sizeof(VariableStatData));
 				vardata = palloc(sizeof(VariableStatData));
 
-				vardata->var = var;    /* return Var without relabeling */
+				vardata->var = (Node *)var;    /* return Var without relabeling */
 				vardata->rel = rel;
 				vardata->atttype = var->vartype;
 				vardata->atttypmod = var->vartypmod;
@@ -1152,7 +1147,7 @@ static void store_idx_advice( List* candidates , ExplainState * 	es )
 	List *rel_clauses = NIL;
 	
 
-	elog( DEBUG2, "IND ADV: store_idx_advice: ENTER" );
+	elog( DEBUG2, "IDX_ADV: store_idx_advice: ENTER" );
 
 	Assert( list_length(candidates) != 0 );
 
@@ -1272,7 +1267,9 @@ static void store_idx_advice( List* candidates , ExplainState * 	es )
 			//elog( INFO , "IND ADV: store_idx_advice: no where clause oid: %d, alias: %s, name: %s",idxcd->reloid,idxcd->erefAlias,get_rel_name(idxcd->reloid));		
 			
 			//elog( DEBUG2 , "IND ADV: store_idx_advice - rel_clauses: %s",TextDatumGetCString(DirectFunctionCall2(pg_get_expr,CStringGetTextDatum(nodeToString(make_ands_explicit(rel_clauses))), ObjectIdGetDatum(idxcd->reloid))));		
-			if(rel_clauses!=NIL) appendStringInfo(&partialClause,deparse_expression(make_ands_explicit(rel_clauses), context, false, false));		
+			if(rel_clauses != NIL){
+				 appendStringInfoString(&partialClause,deparse_expression((Node *)make_ands_explicit(rel_clauses), context, false, false));		
+			}
 			//elog( DEBUG2 , "IND ADV: store_idx_advice: rel_clauses: %s",deparse_expression(make_ands_explicit(rel_clauses), context, false, false));
 		} else
 		{
@@ -2071,16 +2068,17 @@ static bool index_candidates_walker (Node *root, ScanContext *context)
 						
                         elog( DEBUG3 , "IND ADV: OpExpr: working on: %s",rte->eref->aliasname);
                         char *varname = get_relid_attribute_name(rte->relid, e->varattno);
-						char *token_str = strdup(config->partQlauseCol);
+                        elog( DEBUG3 , "IND ADV: OpExpr: working on: %d",rte->relid);
+			char *token_str = strdup(idxadv_columns);
 						
-						elog( DEBUG1 , "IND ADV: OpExpr: check right var, %s, cols: %s",varname,config->partQlauseCol);
-						token = strtok(token_str, ",");
-						elog( DEBUG1 , "IND ADV: token %s",token);
-						while (token && ! foundToken){
-							foundToken = (strcmp(token,varname)==0) ? true : false ;
-							token = strtok(NULL, ",");
-							elog( DEBUG4 , "IND ADV: token %s",token);
-						}
+			elog( DEBUG1 , "IND ADV: OpExpr: check right var, %s, cols: %s",varname,idxadv_columns);
+			token = strtok(token_str, ",");
+			elog( DEBUG1 , "IND ADV: token %s",token);
+			while (token && ! foundToken){
+				foundToken = (strcmp(token,varname)==0) ? true : false ;
+				token = strtok(NULL, ",");
+				elog( DEBUG4 , "IND ADV: token %s",token);
+			}
                         						
                         if (foundToken)
                         {
@@ -2535,6 +2533,8 @@ merge_candidates( List* list1, List* list2 )
 	if( list_length( list2 ) == 0 )
 		return list1;
 
+        if ( list1 == list2 ) return list1;
+
 	ret = NIL;
 	prev2 = NULL;	
 
@@ -2542,8 +2542,8 @@ merge_candidates( List* list1, List* list2 )
 		(cell1 != NULL) && (cell2 != NULL); )
 	{
 		const int cmp = compare_candidates( (IndexCandidate*)lfirst( cell1 ),
-											(IndexCandidate*)lfirst( cell2 ) );
-
+				  		    (IndexCandidate*)lfirst( cell2 ) );
+                elog( DEBUG4, "IDX_ADV: candidate compare returns: %d",cmp);
 		if( cmp <= 0 )
 		{
 			/* next candidate comes from list 1 */
@@ -2558,8 +2558,8 @@ merge_candidates( List* list1, List* list2 )
 			{
 				ListCell *next = lnext( cell2 );
 
-				pfree( (IndexCandidate*)lfirst( cell2 ) );
-				list2 = list_delete_cell( list2, cell2, prev2 );
+				//pfree( (IndexCandidate*)lfirst( cell2 ) );
+				//list2 = list_delete_cell( list2, cell2, prev2 );
 
 				cell2 = next;
 			}
@@ -2573,21 +2573,29 @@ merge_candidates( List* list1, List* list2 )
 			cell2 = lnext( cell2 );
 		}
 	}
+        
+        elog( DEBUG4, "IDX_ADV: so far we have: %d",list_length( ret ));
+         log_candidates( "so far: ", ret );
 
 	/* Now append the leftovers from both the lists; only one of them should have any elements left */
-	for( ; cell1; cell1 = lnext(cell1) )
+	for( ; cell1 != NULL; cell1 = lnext(cell1) )
 		ret = lappend( ret, lfirst(cell1) );
 
-	for( ; cell2; cell2 = lnext(cell2) )
+	for( ; cell2 != NULL ; cell2 = lnext(cell2) )
 		ret = lappend( ret, lfirst(cell2) );
 
-	list_free( list1 );
-	list_free( list2 );
+        elog( DEBUG4, "IDX_ADV: free current candidate lists");
+        list1->type = T_List;
+        list2->type = T_List;
+        elog( DEBUG4, "IDX_ADV: free current candidate list1");
+	if (list1 != NIL ) list_free( list1 );
+        elog( DEBUG4, "IDX_ADV: free current candidate list2");
+	if (list2 != NIL ) list_free( list2 );
 
 	log_candidates( "merged-list", ret );
 
 	elog( DEBUG4, "IND ADV: merge_candidates: EXIT" );
-
+        ret->type = T_List;
 	return ret;
 }
 
@@ -2820,7 +2828,7 @@ build_composite_candidates( List* list1, List* list2 )
 					/* do not build a composite candidate if the number of
 					 * attributes would exceed INDEX_MAX_KEYS
 					*/
-					if(( ( cand1->ncols + cand2->ncols ) < INDEX_MAX_KEYS )&&(( cand1->ncols + cand2->ncols ) <= config->composit_max_cols))
+					if(( ( cand1->ncols + cand2->ncols ) < INDEX_MAX_KEYS )&&(( cand1->ncols + cand2->ncols ) <= idxadv_composit_max_cols))
 					{
 
 						/* Check if candidates have any common attribute */
@@ -3034,7 +3042,8 @@ static List* create_virtual_indexes( List* candidates )
 			op_class[i] = GetDefaultOpClass( cand->vartype[ i ], BTREE_AM_OID );
 			/* Replace text_ops with text_pattern_ops */
 			if (op_class[i]==3126){
-				config->text_pattern_ops?op_class[i] = 10049:NULL; //  see pg_opclass.oid - this actually works, changes to text_pattern_ops instead of pattern ops (in te strangest way ever... see: http://doxygen.postgresql.org/indxpath_8c_source.html#l03403)
+				idxadv_text_pattern_ops?op_class[i] = 10049:NULL; 
+                                //  see pg_opclass.oid - this actually works, changes to text_pattern_ops instead of pattern ops (in te strangest way ever... see: http://doxygen.postgresql.org/indxpath_8c_source.html#l03403)
 				// TODO: find a way to get this via SYSCACHE instead of fixed numbers (or at least make CONSTS)
 				collationObjectId[i] = DEFAULT_COLLATION_OID ; //100; // need to figure this out - 100 is the default but doesn't pass for some reason...
 			}
@@ -3064,7 +3073,7 @@ static List* create_virtual_indexes( List* candidates )
 		*/
 		sprintf( idx_name, "idx_adv_%d", idx_count );
         elog( DEBUG4, "IND ADV: create_virtual_indexes: pre create" );
-        elog( DEBUG4, idx_name );
+        elog( DEBUG4, "idxx name: %s", idx_name );
 
         elog( DEBUG4, "IND ADV: create_virtual_indexes: open relation" );
 		// CHECK: get Relation from  cand->reloid
@@ -3094,6 +3103,9 @@ static List* create_virtual_indexes( List* candidates )
 					,true	// 	concurrent
 #endif
 					,false //is_internal true/false?
+#if PG_VERSION_NUM >= 90500
+					,false // if_not_exists
+#endif
 					);
 
 		// TODO: update candidate fields:
