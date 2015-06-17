@@ -1,10 +1,15 @@
-pg_idx_advisor 0.1.1
+pg_idx_advisor 0.1.2
 ============
 
 Synopsis
 --------
 ```
-load '$libdir/plugins/pg_idx_advisor.so';;
+create extension pg_idx_advisor;
+CREATE EXTENSION
+
+load '$libdir/plugins/pg_idx_advisor.so';
+NOTICE:  IND ADV: plugin loaded
+LOAD
 
 explain select * from t where a = 100;
 INFO:

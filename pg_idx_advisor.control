@@ -1,5 +1,5 @@
 # pg_idx_advisor extension
 comment = 'Index advice for PostgreSQL'
-default_version = '0.1.1'
+default_version = '0.1.2'
 module_pathname = '$pkglibdir/plugins/pg_idx_advisor'
 relocatable = true

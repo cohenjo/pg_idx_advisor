@@ -1,5 +1,9 @@
 Revision history for PostgreSQL extension pg_idx_advisor.
 
+0.1.2  2015-06-17 22:00:00
+      - Currect SQL files for creating the extension.
+      - Improve documentation
+
 0.1.1  2015-06-17 21:00:00
       - BugFix: Statistics can now exist on the tables.
       - BugFix: memory leaks.

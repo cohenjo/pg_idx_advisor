@@ -2,7 +2,7 @@
    "name": "pg_idx_advisor",
    "abstract": "Index advice for PostgreSQL",
    "description": "pg_idx_advisor is a PostgreSQL extension that gives index tuning recommendations for queries.",
-   "version": "0.1.1",
+   "version": "0.1.2",
    "release_status": "stable",
    "maintainer": [
       "Jony V. Cohen <jony.cohenjo@gmail.com>"      
@@ -25,7 +25,7 @@
      "idx_adv": {
        "file": "pg_idx_advisor.so",
        "docfile": "doc/README.md",
-       "version": "0.1.1",
+       "version": "0.1.2",
        "abstract": "Index advice for PostgreSQL"
      }
    },
