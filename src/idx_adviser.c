@@ -2369,6 +2369,7 @@ static List* scan_generic_node(	const Node* const root,
 							List* const rangeTableStack )
 {
 	ScanContext context;
+        context.candidates = NIL;
 	context.opnos = opnos;
 	context.rangeTableStack = rangeTableStack;
 	elog( DEBUG4, "IND ADV: scan_generic_node: before tree walk" );
