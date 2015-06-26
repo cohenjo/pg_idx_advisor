@@ -359,7 +359,11 @@ static PlannedStmt* index_adviser(	Query*			queryCopy,
 		/* 
 		 * collect operator ids into an array.
 		 */
-		for(	opnosResult = OpernameGetCandidates( supop, '\0' , true);
+		for(	opnosResult = OpernameGetCandidates( supop, '\0' 
+#if PG_VERSION_NUM >= 90400
+                                                           , true
+#endif
+                                                           );
 				opnosResult != NULL;
 				opnosResult = lnext(opnosResult) )
 		{
@@ -713,7 +717,11 @@ ExplainOneQuery_callback(Query	*query,  IntoClause *into,
 	actual_plan = standard_planner( query, 0, params );
 
 	/* run it (if needed) and produce output */
-	ExplainOnePlan( actual_plan, into, stmt, queryString, params, &planduration);
+	ExplainOnePlan( actual_plan, into, stmt, queryString, params
+#if PG_VERSION_NUM >= 90400
+                      , &planduration
+#endif
+                      );
 
 	elog( DEBUG1 , "IND ADV: re-plan the query"); 
 
@@ -737,7 +745,11 @@ ExplainOneQuery_callback(Query	*query,  IntoClause *into,
 			elog( INFO , "\n** Plan with Original indexes **\n");			
 			//do_text_output_multiline(tstate, "\n** Plan with hypothetical indexes **\n"); /* separator line */
 			//end_tup_output(tstate);
-			ExplainOnePlan( new_plan, into, stmt, queryString, params, &planduration);
+			ExplainOnePlan( new_plan, into, stmt, queryString, params
+#if PG_VERSION_NUM >= 90400
+                                      , &planduration
+#endif
+                                      );
 
 			explain_get_index_name_hook = NULL;
 
