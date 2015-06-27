@@ -36,8 +36,8 @@ to find it:
 
 
 ## Usage ##
-First you must load the library using the 'LOAD' command:
-`Load '$pglibdir/pg_idx_advisor.so'`
+First Create the extension `create extension pg_idx_advisor;` it will create the requires table to store query recommendations.
+Then you must load the library using the 'LOAD' command: `Load '$pglibdir/pg_idx_advisor.so'`
 simply run the query with the "explain" - you will see both the original execution plan as well as the new plan with the suggested Virtual/Hypothetical indexes.
 
 Examples:
