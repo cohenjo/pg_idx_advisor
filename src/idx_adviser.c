@@ -117,7 +117,7 @@ static void store_idx_advice( List* candidates, ExplainState * 	es );
 static void log_candidates( const char* text, List* candidates );
 
 /* function used for estimating the size of virtual indexes */
-static int8 estimate_index_pages(Oid rel_oid, Oid ind_oid );
+static BlockNumber estimate_index_pages(Oid rel_oid, Oid ind_oid );
 
 static PlannedStmt* planner_callback(	Query*			query,
 					int				cursorOptions,
@@ -897,8 +897,9 @@ static void get_relation_info_callback(	PlannerInfo	*root,
 		* v9.4 introduced a concept of tree height for btree, we'll use unkonown for now
 		* loot at _bt_getrootheight on how to estimate this.
 		*/
+#if PG_VERSION_NUM >= 90300
 		info->tree_height = -1;
-
+#endif
 		/*
 		* Fetch the ordering information for the index, if any.
 		*/
@@ -1065,11 +1066,11 @@ static void get_relation_info_callback(	PlannerInfo	*root,
 			elog( DEBUG3, "IND ADV: get_relation_info_callback: selectivity = %.5f", btreeSelectivity);
 			
 			/* estimate the size */
-			cand->pages = (int) ceil(btreeSelectivity * estimate_index_pages(cand->reloid, cand->idxoid));
+			cand->pages = (BlockNumber)lrint(btreeSelectivity * estimate_index_pages(cand->reloid, cand->idxoid));
 			if(cand->pages == 0) // we must allocate at least 1 page
 				cand->pages=1;
 			info->pages = cand->pages;
-			elog( DEBUG3, "IND ADV: get_relation_info_callback: pages: %d",info->pages);
+			elog( DEBUG3, "IDX_ADV: get_relation_info_callback: pages: %d",info->pages);
 			info->tuples = (int) ceil(btreeSelectivity * rel->tuples);
 			cand->tuples = (int) ceil(btreeSelectivity * rel->tuples);
 			//elog( DEBUG3, "IND ADV: get_relation_info_callback: tuples: %d",info->tuples);
@@ -3185,13 +3186,13 @@ static void drop_virtual_indexes( List* candidates )
 	elog( DEBUG3, "IND ADV: drop_virtual_indexes: EXIT" );
 }
 
-static int8 estimate_index_pages(Oid rel_oid, Oid ind_oid )
+static 	BlockNumber estimate_index_pages(Oid rel_oid, Oid ind_oid )
 {
 	Size	data_length;
 	int		i;
 	int		natts;
 	int8	var_att_count;
-	int8	rel_pages;						/* diskpages of heap relation */
+	BlockNumber rel_pages;						/* diskpages of heap relation */
 	float4	rel_tuples;						/* tupes in the heap relation */
 	double	idx_pages;					   /* diskpages in index relation */
 
@@ -3203,8 +3204,10 @@ static int8 estimate_index_pages(Oid rel_oid, Oid ind_oid )
 	base_rel	= heap_open( rel_oid, AccessShareLock );
 	index_rel	= index_open( ind_oid, AccessShareLock );
 
-	rel_pages = base_rel->rd_rel->relpages;
+	// rel_pages = base_rel->rd_rel->relpages;
 	rel_tuples = base_rel->rd_rel->reltuples;
+        rel_pages = RelationGetNumberOfBlocks(base_rel);
+        elog(DEBUG3, "IDX_ADV: estimate_index_pages: rel_id: %d, pages: %d,, tuples: %f",rel_oid,rel_pages,rel_tuples);
 
 	ind_tup_desc = RelationGetDescr( index_rel );
 
@@ -3225,6 +3228,7 @@ static int8 estimate_index_pages(Oid rel_oid, Oid ind_oid )
 	 */
 	var_att_count = 0;
 	data_length = 0;
+        elog(DEBUG3, "IDX_ADV: estimate_index_pages: natts: %d",natts);
 	for( i = 0; i < natts; ++i)
 	{
 		/* the following is based on att_addlength() macro */
@@ -3232,8 +3236,8 @@ static int8 estimate_index_pages(Oid rel_oid, Oid ind_oid )
 		{
 			/* No need to do +=; RHS is incrementing data_length by including it in the sum */
 			data_length = att_align_nominal(data_length, atts[i]->attalign);
-
 			data_length += atts[i]->attlen;
+                        elog(DEBUG3, "IDX_ADV: estimate_index_pages: data_length: %d",data_length);
 		}
 		else if( atts[i]->attlen == -1 )
 		{
@@ -3259,28 +3263,35 @@ static int8 estimate_index_pages(Oid rel_oid, Oid ind_oid )
 	 */
 	if( var_att_count )
 		data_length += (((float)rel_pages * (BLCKSZ - (sizeof(PageHeaderData)
-														- sizeof(ItemIdData)
-							)				)			)
-							- (rel_tuples * sizeof(ItemIdData))
-							- (data_length * rel_tuples)
-						)
-						/rel_tuples;
+					- sizeof(ItemIdData)
+				)	)	)
+				- (rel_tuples * sizeof(ItemIdData))
+				- (data_length * rel_tuples)
+			)
+				/rel_tuples;
 
 	/* Take into account the possibility that we might have NULL values */
 	data_length += IndexInfoFindDataOffset( INDEX_NULL_MASK );
+
+        elog(DEBUG3, "IDX_ADV: estimate_index_pages: data_length: %d",data_length);
+        elog(DEBUG3, "IDX_ADV: estimate_index_pages: sizeof(ItemIdData): %d",sizeof(ItemIdData));
+        elog(DEBUG3, "IDX_ADV: estimate_index_pages: rel_tuples: %f",rel_tuples);
+        elog(DEBUG3, "IDX_ADV: estimate_index_pages: SizeOfPageHeaderData: %d",SizeOfPageHeaderData);
+        elog(DEBUG3, "IDX_ADV: estimate_index_pages: BLCKSZ: %d",BLCKSZ);
+        elog(DEBUG3, "IDX_ADV: estimate_index_pages: sizeof(BTPageOpaqueData: %d",sizeof(BTPageOpaqueData));
 
 	idx_pages = (rel_tuples * (data_length + sizeof(ItemIdData)))
 				/((BLCKSZ - SizeOfPageHeaderData
 						- sizeof(BTPageOpaqueData)
 					)
 					* ((float)BTREE_DEFAULT_FILLFACTOR/100));
-
-	idx_pages = ceil( idx_pages );
+	//idx_pages = ceil( idx_pages );
 
 	heap_close( base_rel, AccessShareLock );
 	index_close( index_rel, AccessShareLock );
 
-	return (int8)idx_pages;
+        elog(DEBUG3, "IDX_ADV: estimate_index_pages: idx_pages: %d, %d",(int8)lrint(idx_pages), (BlockNumber)lround(idx_pages));
+	return (BlockNumber)lrint(idx_pages);
 }
 
 
