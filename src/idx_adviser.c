@@ -72,31 +72,36 @@ PG_MODULE_MAGIC;
 
 static bool index_candidates_walker (Node *root, ScanContext *context);
 static List* scan_query(	const Query* const query,
-							List* const opnos,
-							List* rangeTableStack );
+				List* const opnos,
+				List* rangeTableStack );
 
 static List* scan_generic_node(	const Node* const root,
-								List* const opnos,
-								List* const rangeTableStack );
+				List* const opnos,
+				List* const rangeTableStack );
 
 static List* scan_group_clause(	List* const groupList,
-								List* const targtList,
-								List* const opnos,
-								List* const rangeTblStack );
+				List* const targtList,
+				List* const opnos,
+				List* const rangeTblStack );
+
+static List* scan_targetList(   List* const targetList,
+                                List* const opnos,
+                                List* const rangeTableStack );
+
 
 static List* build_composite_candidates( List* l1, List* l2 );
 
 static List* remove_irrelevant_candidates( List* candidates );
 static void tag_and_remove_candidates(Cost startupCostSaved, 
-									  Cost totalCostSaved, 
-									  PlannedStmt *new_plan,
-									  const Node* const head,
-									  List* const candidates);
+				  Cost totalCostSaved, 
+				  PlannedStmt *new_plan,
+				  const Node* const head,
+				  List* const candidates);
 static void mark_used_candidates(	const Node* const plan,
-									List* const candidates );
+					List* const candidates );
 
 static int compare_candidates(	const IndexCandidate* c1,
-								const IndexCandidate* c2 );
+				const IndexCandidate* c2 );
 
 static List* merge_candidates( List* l1, List* l2 );
 static List* expand_inherited_candidates(List* list1);
@@ -1868,8 +1873,7 @@ static List* scan_query(	const Query* const query,
 	foreach( cell, query->cteList )
 	{
 		const CommonTableExpr* const rte = (const CommonTableExpr*)lfirst( cell );
-		elog( DEBUG3 , "IND ADV: scan_query: working on: %s",rte->ctename);		
-		//elog( DEBUG3 , "IND ADV: scan_query: working on: %d",rte->rtekind);		
+		elog( DEBUG3 , "IND ADV: scan_query: CTE working on: %s",rte->ctename);		
 		
 		if( rte->ctequery )
 		{
@@ -1885,7 +1889,7 @@ static List* scan_query(	const Query* const query,
 	foreach( cell, query->rtable )
 	{
 		const RangeTblEntry* const rte = (const RangeTblEntry*)lfirst( cell );
-		elog( DEBUG3 , "IND ADV: scan_query: working on: %s",rte->eref->aliasname);		
+		elog( DEBUG3 , "IND ADV: scan_query: SUB working on: %s",rte->eref->aliasname);		
 		//elog( DEBUG3 , "IND ADV: scan_query: working on: %d",rte->rtekind);		
 		
 		if( rte->subquery )
@@ -1913,7 +1917,7 @@ static List* scan_query(	const Query* const query,
 	if( query->jointree->quals != NULL )
 	{
 		newCandidates = scan_generic_node(	query->jointree->quals, opnos,
-											rangeTableStack );		
+							rangeTableStack );		
 	}
 
 	/* FIXME: Why don't we consider the GROUP BY and ORDER BY clause
@@ -1925,18 +1929,25 @@ static List* scan_query(	const Query* const query,
 	if( ( newCandidates == NIL ) && ( query->groupClause != NULL ) )
 	{
 		newCandidates = scan_group_clause(	query->groupClause,
-											query->targetList,
-											opnos,
-											rangeTableStack );
+							query->targetList,
+							opnos,
+							rangeTableStack );
 	}
 
 	/* if no indexcadidate found in "group", scan "order by" */
 	if( ( newCandidates == NIL ) && ( query->sortClause != NULL ) )
 	{
 		newCandidates = scan_group_clause(	query->sortClause,
-											query->targetList,
-											opnos,
-											rangeTableStack );
+							query->targetList,
+							opnos,
+							rangeTableStack );
+	}
+	/* if no indexcadidate found until now, scan the target list "select" */
+	if( ( newCandidates == NIL ) && ( query->targetList != NULL ) )
+	{
+		newCandidates = scan_targetList(	query->targetList,
+							opnos,
+							rangeTableStack );
 	}
 
 	/* remove the current rangetable from the stack */
@@ -1991,6 +2002,38 @@ static List* scan_group_clause(	List* const groupList,
 	return candidates;
 }
 
+
+/**
+ * scan_targetList
+ *    Runs thru the GROUP BY clause looking for columns to create index candidates.
+ */
+static List* scan_targetList(	List* const targetList,
+				List* const opnos,
+				List* const rangeTableStack )
+{
+	const ListCell*	cell;
+	List* candidates = NIL;
+
+	elog( DEBUG3, "IND ADV: scan_targetList: ENTER" );
+
+	/* scan every entry in the target-list */
+	foreach( cell , targetList )
+	{
+		/* convert to TargetEntry - the column with the expression */
+		const TargetEntry* const targetElm = (const TargetEntry*)lfirst( cell );
+
+		/* scan the node and get candidates */
+		const Node* const node = (const Node*)targetElm->expr;
+
+		candidates = merge_candidates(  candidates, scan_generic_node( node,
+						opnos,
+						rangeTableStack));
+	}
+
+	elog( DEBUG3, "IND ADV: scan_targetList: EXIT" );
+
+	return candidates;
+}
 
 
 static bool index_candidates_walker (Node *root, ScanContext *context)
@@ -2220,7 +2263,20 @@ static bool index_candidates_walker (Node *root, ScanContext *context)
 			return false;
 		}
 		break;
-
+		case T_WindowFunc:
+		{
+		  elog(DEBUG4, "IDX_ADV: inside window func");
+		}break;
+		case T_MinMaxExpr:
+		{
+		  elog(DEBUG4, "IDX_ADV: inside T_MinMaxExpr func");
+		}break;
+#if PG_VERSION_NUM >= 90400
+		case T_GroupingFunc:
+		{
+		  elog(DEBUG4, "IDX_ADV: inside grouping func");
+		}break;
+#endif
 		/* create functional index */
 		case T_FuncExpr:
 			{
