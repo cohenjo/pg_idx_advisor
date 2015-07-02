@@ -22,7 +22,7 @@
  */
 
 /* ------------------------------------------------------------------------
- * Includes 
+ * Includes
  * ------------------------------------------------------------------------
  */
 //#include <sys/time.h>
@@ -92,8 +92,8 @@ static List* scan_targetList(   List* const targetList,
 static List* build_composite_candidates( List* l1, List* l2 );
 
 static List* remove_irrelevant_candidates( List* candidates );
-static void tag_and_remove_candidates(Cost startupCostSaved, 
-				  Cost totalCostSaved, 
+static void tag_and_remove_candidates(Cost startupCostSaved,
+				  Cost totalCostSaved,
 				  PlannedStmt *new_plan,
 				  const Node* const head,
 				  List* const candidates);
@@ -131,7 +131,7 @@ static PlannedStmt* planner_callback(	Query*			query,
 static void ExplainOneQuery_callback(	Query*	query,  IntoClause *into,
 					ExplainState*	stmt,
 					const char*	queryString,
-					ParamListInfo	params); 
+					ParamListInfo	params);
 
 static void get_relation_info_callback(	PlannerInfo*	root,
 					Oid				relationObjectId,
@@ -324,13 +324,13 @@ static PlannedStmt* index_adviser(	Query*			queryCopy,
 	ResourceOwner	oldResourceOwner;
 	PlannedStmt		*new_plan;
 	MemoryContext	outerContext;
-	
+
 
 	char *SupportedOps[] = { "=", "<", ">", "<=", ">=", "~~", }; /* Added support for LIKE ~~ */
 
-	
+
 	elog( DEBUG3, "IND ADV: Entering" );
-	
+
 
 	/* We work only in Normal Mode, and non-recursively; that is, we do not work
 	 * on our own DML.
@@ -344,10 +344,10 @@ static PlannedStmt* index_adviser(	Query*			queryCopy,
 	/* Remember the memory context; we use it to pass interesting data back. */
 	outerContext = CurrentMemoryContext;
 
-	/* reset these globals; since an ERROR might have left them unclean */	
+	/* reset these globals; since an ERROR might have left them unclean */
 	index_candidates = NIL;
 	table_clauses = NIL;
-	
+
 
 	/* get the costs without any virtual index */
 	actualStartupCost	= actual_plan->planTree->startup_cost;
@@ -361,10 +361,10 @@ static PlannedStmt* index_adviser(	Query*			queryCopy,
 
 		List* supop = list_make1( makeString( SupportedOps[i] ) );
 
-		/* 
+		/*
 		 * collect operator ids into an array.
 		 */
-		for(	opnosResult = OpernameGetCandidates( supop, '\0' 
+		for(	opnosResult = OpernameGetCandidates( supop, '\0'
 #if PG_VERSION_NUM >= 90400
                                                            , true
 #endif
@@ -423,7 +423,7 @@ static PlannedStmt* index_adviser(	Query*			queryCopy,
 	elog( DEBUG1, "SPI connection start - TODO FIX THIS!!");
 	if( SPI_connect() != SPI_OK_CONNECT )
 	{
-		elog( WARNING, "IND ADV: SPI_connect() call failed - pre virtual index creation." );		
+		elog( WARNING, "IND ADV: SPI_connect() call failed - pre virtual index creation." );
 		goto DoneCleanly;
 	}
 
@@ -451,9 +451,9 @@ static PlannedStmt* index_adviser(	Query*			queryCopy,
 	elog( DEBUG1, "IDX ADV: do re-planning using virtual indexes" );
 	/* do re-planning using virtual indexes */
 	/* TODO: is the plan ever freed? */
-	
+
 	new_plan = standard_planner(queryCopy, cursorOptions, boundParams);
-	
+
 	elog( DEBUG1, "IND ADV: release the hook" );
 	/* reset the hook */
 	get_relation_info_hook = NULL;
@@ -461,7 +461,7 @@ static PlannedStmt* index_adviser(	Query*			queryCopy,
 	elog( DEBUG1, "IND ADV: remove the virtual-indexes" );
 	/* remove the virtual-indexes */
 	drop_virtual_indexes( candidates );
-	
+
 	newStartupCost	= new_plan->planTree->startup_cost;
 	newTotalCost	= new_plan->planTree->total_cost;
     elog( DEBUG1 , "IND ADV: new plan costs: %lf .. %lf ",newStartupCost,newTotalCost);
@@ -480,12 +480,12 @@ static PlannedStmt* index_adviser(	Query*			queryCopy,
 
 	totalCostSaved = actualTotalCost - newTotalCost;
 
-	
+
 	tag_and_remove_candidates(startupCostSaved, totalCostSaved, new_plan, (Node*)new_plan->planTree, candidates);
-/*	
+/*
 	if( startupCostSaved >0 || totalCostSaved > 0 )
 	{
-	
+
 		plannedStmtGlobal = new_plan;
 
 		//elog_node_display( DEBUG4, "plan (using Index Adviser)",(Node*)new_plan->planTree, true );
@@ -495,7 +495,7 @@ static PlannedStmt* index_adviser(	Query*			queryCopy,
 		plannedStmtGlobal = NULL;
 	}
 */
-	
+
 
 	/* update the global var */
 	index_candidates = candidates;
@@ -666,7 +666,7 @@ static PlannedStmt* planner_callback(	Query*			query,
 
 	PG_TRY();
 	{
-	
+
 
 		/* send the actual plan for comparison with a hypothetical plan */
 		elog( DEBUG3 , "planner_callback: index_adviser");
@@ -678,13 +678,13 @@ static PlannedStmt* planner_callback(	Query*			query,
 		elog(WARNING, "Failed to create index advice for: %s",debug_query_string);
 		/* reset our 'running' state... */
 		SuppressRecursion=0;
-			
+
 	}
 	PG_END_TRY();
 
 	/* TODO: try to free the redundant new_plan */
 	elog( DEBUG3 , "planner_callback: Done");
-	
+
 	return actual_plan;
 }
 
@@ -728,11 +728,11 @@ ExplainOneQuery_callback(Query	*query,  IntoClause *into,
 #endif
                       );
 
-	elog( DEBUG1 , "IND ADV: re-plan the query"); 
+	elog( DEBUG1 , "IND ADV: re-plan the query");
 
 	PG_TRY();
 	{
-	
+
 		/* re-plan the query */
 		appendStringInfo(stmt->str, "\n** Plan with hypothetical indexes **\n");
 		new_plan = index_adviser( queryCopy, 0, params, actual_plan,stmt, true );
@@ -743,11 +743,11 @@ ExplainOneQuery_callback(Query	*query,  IntoClause *into,
 
 			stmt->analyze = false;
 			elog( DEBUG1 , "got new plan");
-		
+
 			explain_get_index_name_hook = explain_get_index_name_callback;
 			//DestReceiver *dest = CreateDestReceiver(DestDebug);
 			//TupOutputState *tstate = begin_tup_output_tupdesc(dest, ExplainResultDesc(stmt));
-			elog( INFO , "\n** Plan with Original indexes **\n");			
+			elog( INFO , "\n** Plan with Original indexes **\n");
 			//do_text_output_multiline(tstate, "\n** Plan with hypothetical indexes **\n"); /* separator line */
 			//end_tup_output(tstate);
 			ExplainOnePlan( new_plan, into, stmt, queryString, params
@@ -766,7 +766,7 @@ ExplainOneQuery_callback(Query	*query,  IntoClause *into,
 		elog(WARNING, "Failed to create index advice for: %s",debug_query_string);
 		/* reset our 'running' state... */
 		SuppressRecursion=0;
-			
+
 	}
 	PG_END_TRY();
 
@@ -824,7 +824,7 @@ static void get_relation_info_callback(	PlannerInfo	*root,
 
 	elog( DEBUG1, "IND ADV: get_relation_info_callback: ENTER." );
 	relation = heap_open( relationObjectId, NoLock);
-  
+
     indexoidlist = RelationGetIndexList(relation);
 
 	elog( DEBUG3, "IND ADV: get_relation_info_callback: index list length %d",list_length(indexoidlist));
@@ -838,9 +838,9 @@ static void get_relation_info_callback(	PlannerInfo	*root,
 		int         ncolumns;
 		int         i;
 		int			simpleColumns = 0;
-		
+
 		if( !is_virtual_index( indexoid, NULL ) ) { elog( DEBUG1, "IND ADV: get_relation_info_callback: real index - skipping "); continue; }// skip actual indexes
-		
+
 		elog( DEBUG1, "IND ADV: get_relation_info_callback: index list loop");
 		indexRelation = index_open(indexoid, lmode);
   		index = indexRelation->rd_index;
@@ -850,21 +850,21 @@ static void get_relation_info_callback(	PlannerInfo	*root,
 		info->indexoid = index->indexrelid;
 		info->reltablespace = RelationGetForm(indexRelation)->reltablespace;
 		info->rel = rel;
-		info->ncolumns = ncolumns = index->indnatts;		
+		info->ncolumns = ncolumns = index->indnatts;
 		info->indexkeys = (int *) palloc(sizeof(int) * INDEX_MAX_KEYS);
 		info->indexcollations = (Oid *) palloc(sizeof(Oid) * ncolumns);
 		info->opfamily = (Oid *) palloc(sizeof(Oid) * ncolumns);
 		info->opcintype = (Oid *) palloc(sizeof(Oid) * ncolumns);
                 info->canreturn = (bool *) palloc(sizeof(bool) * ncolumns);
 		elog( DEBUG3, "IND ADV: get_relation_info_callback: index oid: %d, ncols: %d",indexoid,ncolumns);
-		
+
 		for (i = 0; i < ncolumns; i++)
 		{
                         elog( DEBUG3, "IDX_ADV: column %d  ",i);
 			info->indexkeys[i] = index->indkey.values[i];
 			if(info->indexkeys[i] != 0)
 				simpleColumns +=1;
-			info->indexcollations[i] = indexRelation->rd_indcollation[i]; //InvalidOid;			
+			info->indexcollations[i] = indexRelation->rd_indcollation[i]; //InvalidOid;
 			info->opfamily[i] = indexRelation->rd_opfamily[i];
 			info->opcintype[i] = indexRelation->rd_opcintype[i];
 #if PG_VERSION_NUM >= 90500
@@ -874,8 +874,8 @@ static void get_relation_info_callback(	PlannerInfo	*root,
                 elog( DEBUG3, "IDX_ADV: done with per column  ");
 		for (; i < INDEX_MAX_KEYS; i++)
 		{
-			info->indexkeys[i] = 0;			
-		} 
+			info->indexkeys[i] = 0;
+		}
 
 		//info->relam = indexRelation->rd_rel->relam;
 
@@ -894,10 +894,10 @@ static void get_relation_info_callback(	PlannerInfo	*root,
 		//info->amsearchnulls = indexRelation->rd_am->amsearchnulls;
 		info->amhasgettuple = OidIsValid(indexRelation->rd_am->amgettuple);
 		info->amhasgetbitmap = OidIsValid(indexRelation->rd_am->amgetbitmap);
-		
+
         info->amoptionalkey = false;
         info->amsearchnulls = false;
-		
+
 		/*
 		* v9.4 introduced a concept of tree height for btree, we'll use unkonown for now
 		* loot at _bt_getrootheight on how to estimate this.
@@ -908,7 +908,7 @@ static void get_relation_info_callback(	PlannerInfo	*root,
 		/*
 		* Fetch the ordering information for the index, if any.
 		*/
-                // TODO: how to handle non BTREE ops (support other index types, see: get_relation_info: plancat.c:88)		
+                // TODO: how to handle non BTREE ops (support other index types, see: get_relation_info: plancat.c:88)
 		//if (info->relam == BTREE_AM_OID)
 		if ( 1 == 1)
 		{
@@ -926,40 +926,40 @@ static void get_relation_info_callback(	PlannerInfo	*root,
 			for (i = 0; i < ncolumns; i++)
 			{
 				int16       opt = indexRelation->rd_indoption[i];
-			
+
 				info->reverse_sort[i] = (opt & INDOPTION_DESC) != 0;
 				info->nulls_first[i] = (opt & INDOPTION_NULLS_FIRST) != 0;
 			}
-		}			
+		}
 		else
 		{
 			info->sortopfamily = NULL;
 			info->reverse_sort = NULL;
 			info->nulls_first = NULL;
 		}
-			
-		elog( DEBUG3 , "IND ADV: almost there...");		
+
+		elog( DEBUG3 , "IND ADV: almost there...");
 		/*
 		* Fetch the index expressions and predicate, if any.  We must
 		* modify the copies we obtain from the relcache to have the
 		* correct varno for the parent relation, so that they match up
 		* correctly against qual clauses.
 		*/
-		elog( DEBUG3 , "IND ADV: getting realtion expressions");		
+		elog( DEBUG3 , "IND ADV: getting realtion expressions");
 		info->indexprs = RelationGetIndexExpressions(indexRelation);
 		info->ncolumns = simpleColumns + list_length(info->indexprs); // TODO: why is this?!?! really ugly hack?!?
 
-		elog( DEBUG3 , "IND ADV: get index predicates");		
+		elog( DEBUG3 , "IND ADV: get index predicates");
 		info->indpred = RelationGetIndexPredicate(indexRelation);
-		elog( DEBUG3 , "IND ADV: change var nodes - expr");		
+		elog( DEBUG3 , "IND ADV: change var nodes - expr");
 		if (info->indexprs && varno != 1)
 		  ChangeVarNodes((Node *) info->indexprs, 1, varno, 0);
-		elog( DEBUG3 , "IND ADV: change var nodes - pred");		
+		elog( DEBUG3 , "IND ADV: change var nodes - pred");
 		if (info->indpred && varno != 1)
 		  ChangeVarNodes((Node *) info->indpred, 1, varno, 0);
 
 		//elog_node_display( DEBUG3 , "IND ADV: get_relation_info_callback: ", (const OpExpr*)list_nth(context->predicate,0),true);
-		elog( DEBUG3 , "IND ADV: Build targetlist using the completed indexprs data");		
+		elog( DEBUG3 , "IND ADV: Build targetlist using the completed indexprs data");
 
 		/* Build targetlist using the completed indexprs data - used in index only scans */
 		info->indextlist = build_index_tlist(root, info, relation);
@@ -968,7 +968,7 @@ static void get_relation_info_callback(	PlannerInfo	*root,
 		info->predOK = false;       /* set later in indxpath.c */
 		info->unique = index->indisunique;
 		info->immediate = index->indimmediate;
-		info->hypothetical = true; // used to prevent access to the disc. see: src/backend/utils/adt/selfuncs.c -> get_actual_variable_range 
+		info->hypothetical = true; // used to prevent access to the disc. see: src/backend/utils/adt/selfuncs.c -> get_actual_variable_range
 
 		/* We call estimate_index_pages() here, instead of immediately after
 		 * index_create() API call, since rel has been run through
@@ -984,11 +984,11 @@ static void get_relation_info_callback(	PlannerInfo	*root,
 			Const		*cons;
 			VariableStatData ldata,rdata;
 			VariableStatData *vardata;
-						
+
 			elog( DEBUG3 , "IND ADV: get index predicates args");
 			elog_node_display( DEBUG3, "IND ADV:  (info->indpred)", info->indpred, true );
 			if (info->indpred){ // TODO: do i need the varno != 1
-				OpExpr     *opclause = (OpExpr *) linitial(info->indpred);			
+				OpExpr     *opclause = (OpExpr *) linitial(info->indpred);
 				Oid         opno = opclause->opno;
 				RegProcedure oprrest = get_oprrest(opno);
 				elog( DEBUG3 , "IND ADV: get opno 2 %d",opno);
@@ -996,10 +996,10 @@ static void get_relation_info_callback(	PlannerInfo	*root,
 
 				/* TODO: add support for boolean selectivity, create a " var = 't' " clause */
 				if(not_clause(opclause))
-				{					
+				{
 					elog( DEBUG3 , "IND ADV: boolean not expression - todo: compute selectivity");
 					var = (Var *) get_notclausearg((Expr *) opclause);
-					cons = (Const *) makeBoolConst(false,false);	
+					cons = (Const *) makeBoolConst(false,false);
 					opno = BooleanNotEqualOperator   ;
 				}
 				else if(IsA(opclause, Var))
@@ -1021,7 +1021,7 @@ static void get_relation_info_callback(	PlannerInfo	*root,
 					elog( DEBUG3 , "IND ADV: get oprrest3");
 					examine_variable(root, left,  cand->idxoid, &ldata);
 					examine_variable(root, right, cand->idxoid, &rdata);
-			
+
 					/* Set up result fields other than the stats tuple */
 					if(IsA(right, Var))
 					{
@@ -1043,14 +1043,14 @@ static void get_relation_info_callback(	PlannerInfo	*root,
 				vardata->atttype = var->vartype;
 				vardata->atttypmod = var->vartypmod;
 				vardata->isunique = has_unique_index(vardata->rel, var->varattno);
-				/* Try to locate some stats */			
+				/* Try to locate some stats */
 				vardata->statsTuple = SearchSysCache3(STATRELATTINH,
 													ObjectIdGetDatum(relationObjectId),
 													Int16GetDatum(var->varattno),
 													BoolGetDatum(false));
 				vardata->freefunc = ReleaseSysCache;
 				elog( DEBUG3, "IND ADV: get_relation_info_callback: %s stats found for %d",(vardata->statsTuple == NULL) ? "No":"",relationObjectId);
-			
+
 
 				elog( DEBUG3, "IND ADV: get_relation_info_callback: estimate virtual index pages for: %d",cand->idxoid);
 				elog( DEBUG3, "IND ADV: get_relation_info_callback: opno: %d",opno);
@@ -1058,10 +1058,10 @@ static void get_relation_info_callback(	PlannerInfo	*root,
 				elog( DEBUG3, "IND ADV: get_relation_info_callback: oprrest : %d",oprrest);
 				//elog( DEBUG3, "IND ADV: get_relation_info_callback: arg list length : %d",list_length(opclause->args));
 
-				/* Estimate selectivity for a restriction clause. */            
+				/* Estimate selectivity for a restriction clause. */
 				btreeSelectivity = var_eq_cons(vardata, opno,cons->constvalue,
-								cons->constisnull,true);		
-				
+								cons->constisnull,true);
+
 			}else
 			{
 				elog( DEBUG3, "IND ADV: get_relation_info_callback: no index predicates");
@@ -1069,7 +1069,7 @@ static void get_relation_info_callback(	PlannerInfo	*root,
 			}
 
 			elog( DEBUG3, "IND ADV: get_relation_info_callback: selectivity = %.5f", btreeSelectivity);
-			
+
 			/* estimate the size */
 			cand->pages = (BlockNumber)lrint(btreeSelectivity * estimate_index_pages(cand->reloid, cand->idxoid));
 			if(cand->pages == 0) // we must allocate at least 1 page
@@ -1124,7 +1124,7 @@ static const char * explain_get_index_name_callback(Oid indexId)
 {
 	StringInfoData buf;
 	IndexCandidate *cand;
-	
+
 	elog( DEBUG1 ,"explain_get_index_name_callback: ENTER - looking at oid: %d",indexId);
 
 	if( is_virtual_index( indexId, &cand ) )
@@ -1149,7 +1149,7 @@ static const char * explain_get_index_name_callback(Oid indexId)
   */
 static void store_idx_advice( List* candidates , ExplainState * 	es )
 {
-	StringInfoData	query;	/*!< string for Query */	
+	StringInfoData	query;	/*!< string for Query */
 	StringInfoData	cols;	/*!< string for Columns */
 	StringInfoData	pcols;	/*!< string for Partial clause Columns  */
 	StringInfoData	pvals;	/*!< string for Partial clause Values */
@@ -1163,7 +1163,7 @@ static void store_idx_advice( List* candidates , ExplainState * 	es )
 	ListCell		*cell;
 	ListCell   *indexpr_item;
 	List *rel_clauses = NIL;
-	
+
 
 	elog( DEBUG2, "IDX_ADV: store_idx_advice: ENTER" );
 
@@ -1204,7 +1204,7 @@ static void store_idx_advice( List* candidates , ExplainState * 	es )
 				 errmsg( IDX_ADV_ERROR_NE )));
 	}
 
-	initStringInfo( &query );	
+	initStringInfo( &query );
 	initStringInfo( &cols );
 	initStringInfo( &pvals );
 	initStringInfo( &pcols );
@@ -1213,7 +1213,7 @@ static void store_idx_advice( List* candidates , ExplainState * 	es )
 	initStringInfo( &attList );
 	initStringInfo( &partialClause );
 	initStringInfo( &indexDef );
-	
+
 	foreach( cell, candidates )
 	{
 		int i;
@@ -1231,8 +1231,8 @@ static void store_idx_advice( List* candidates , ExplainState * 	es )
 			pfree( cols.data );
 			cols.data = NULL;
 		}*/
-		
-		resetStringInfo( &query );	
+
+		resetStringInfo( &query );
 		resetStringInfo( &cols );
 		resetStringInfo( &pvals );
 		resetStringInfo( &pcols );
@@ -1251,21 +1251,21 @@ static void store_idx_advice( List* candidates , ExplainState * 	es )
 
 			appendStringInfo( &cols, "%s%d", (i>0?",":""), idxcd->varattno[i]);
 			appendStringInfo( &op_class, "%s%d", (i>0?",":""), idxcd->op_class[i]);
-			appendStringInfo( &collationObjectId, "%s%d", (i>0?",":""), idxcd->collationObjectId[i]);			
+			appendStringInfo( &collationObjectId, "%s%d", (i>0?",":""), idxcd->collationObjectId[i]);
 
 			if (idxcd->varattno[i] == 0)
 			{
 				/* expressional index */
 				Node       *indexkey;
-							
+
 				indexkey = (Node *) lfirst(indexpr_item);
-				indexpr_item = lnext(indexpr_item);	
+				indexpr_item = lnext(indexpr_item);
 				keycoltype = exprType(indexkey); // get the attribut column type
 				//elog( DEBUG2 , "IND ADV: store_idx_advice: column collation: %d",exprCollation(indexkey)); // get the attribut collation
 				appendStringInfo(&attList,"%s%s", (i>0?",":""),deparse_expression(indexkey, context, false, false));
 				get_opclass_name(idxcd->op_class[i], keycoltype, &attList);
 				//elog( DEBUG2 , "IND ADV: store_idx_advice: column: %s",deparse_expression(indexkey, context, false, false));
-				//elog( DEBUG2 , "IND ADV: store_idx_advice: column opclass: %s",attList.data);				
+				//elog( DEBUG2 , "IND ADV: store_idx_advice: column opclass: %s",attList.data);
 			}
 			else
 			{
@@ -1274,28 +1274,28 @@ static void store_idx_advice( List* candidates , ExplainState * 	es )
 			}
 		}
 		//elog( DEBUG2 , "IND ADV: store_idx_advice: const exsits %s",pg_get_indexdef_columns(idxcd->idxoid,2));
-		
+
 		//appendStringInfo(&attList,TextDatumGetCString(DirectFunctionCall2(pg_get_expr,CStringGetTextDatum(nodeToString(make_ands_explicit(idxcd->attList))), ObjectIdGetDatum(idxcd->reloid))));
-		//elog( DEBUG2 , "IND ADV: store_idx_advice - idxcd->attList: %s",TextDatumGetCString(DirectFunctionCall2(pg_get_expr,CStringGetTextDatum(nodeToString(make_ands_explicit(idxcd->attList))), ObjectIdGetDatum(idxcd->reloid))));		
+		//elog( DEBUG2 , "IND ADV: store_idx_advice - idxcd->attList: %s",TextDatumGetCString(DirectFunctionCall2(pg_get_expr,CStringGetTextDatum(nodeToString(make_ands_explicit(idxcd->attList))), ObjectIdGetDatum(idxcd->reloid))));
 		// TODO: go over this in a loop
 		if(table_clauses != NIL){
 			//int j=0;
 			//ListCell		*clausCell;
-			rel_clauses = get_rel_clauses(table_clauses, idxcd->reloid,idxcd->erefAlias);	
-			//elog( INFO , "IND ADV: store_idx_advice: no where clause oid: %d, alias: %s, name: %s",idxcd->reloid,idxcd->erefAlias,get_rel_name(idxcd->reloid));		
-			
-			//elog( DEBUG2 , "IND ADV: store_idx_advice - rel_clauses: %s",TextDatumGetCString(DirectFunctionCall2(pg_get_expr,CStringGetTextDatum(nodeToString(make_ands_explicit(rel_clauses))), ObjectIdGetDatum(idxcd->reloid))));		
+			rel_clauses = get_rel_clauses(table_clauses, idxcd->reloid,idxcd->erefAlias);
+			//elog( INFO , "IND ADV: store_idx_advice: no where clause oid: %d, alias: %s, name: %s",idxcd->reloid,idxcd->erefAlias,get_rel_name(idxcd->reloid));
+
+			//elog( DEBUG2 , "IND ADV: store_idx_advice - rel_clauses: %s",TextDatumGetCString(DirectFunctionCall2(pg_get_expr,CStringGetTextDatum(nodeToString(make_ands_explicit(rel_clauses))), ObjectIdGetDatum(idxcd->reloid))));
 			if(rel_clauses != NIL){
-				 appendStringInfoString(&partialClause,deparse_expression((Node *)make_ands_explicit(rel_clauses), context, false, false));		
+				 appendStringInfoString(&partialClause,deparse_expression((Node *)make_ands_explicit(rel_clauses), context, false, false));
 			}
 			//elog( DEBUG2 , "IND ADV: store_idx_advice: rel_clauses: %s",deparse_expression(make_ands_explicit(rel_clauses), context, false, false));
 		} else
 		{
-			elog( DEBUG3 , "IND ADV: store_idx_advice: no where clause");			
+			elog( DEBUG3 , "IND ADV: store_idx_advice: no where clause");
 		}
 
 		appendStringInfo( &indexDef,"create index on %s(%s)%s%s",get_rel_name(idxcd->reloid),attList.data,partialClause.len>0?" where":"",partialClause.len>0?partialClause.data:"");
-		
+
 		/* FIXME: Mention the column names explicitly after the table name. */
 		appendStringInfo( &query, "insert into %s.\""IDX_ADV_TABL"\" values ( %d, array[%s], %f, %d, %d, now(),array[%s],array[%s],array[%s],$$%s$$,$$%s$$,$$%s$$,$$%s$$);",
 									idxadv_schema,
@@ -1303,30 +1303,30 @@ static void store_idx_advice( List* candidates , ExplainState * 	es )
 									cols.data,
 									idxcd->benefit,
 									idxcd->pages * BLCKSZ/1024, /* in KBs */
-									MyProcPid,																		
+									MyProcPid,
 									collationObjectId.data,
 									op_class.data,
 									op_class.data,
 									nodeToString(idxcd->attList),
-									nodeToString(rel_clauses),									
-									strstr(debug_query_string,"explain ")!=NULL?(debug_query_string+8):debug_query_string, /* the explain cmd without the "explain " at the begining... - if it's not found return the original string*/									
-									indexDef.data);		
+									nodeToString(rel_clauses),
+									strstr(debug_query_string,"explain ")!=NULL?(debug_query_string+8):debug_query_string, /* the explain cmd without the "explain " at the begining... - if it's not found return the original string*/
+									indexDef.data);
 		//elog( DEBUG4 , "IND ADV: store_idx_advice: build the index: create index on %s(%s)%s%s",idxcd->erefAlias,attList.data,partialClause.len>0?" where":"",partialClause.len>0?partialClause.data:"");
 
 		if( query.len > 0 )	/* if we generated any SQL */
 		{
 			//appendStringInfo(es->str, "read only, advice, index: %s\n",indexDef.data);
-			
+
 			elog(DEBUG1, "IDX ADV: read only, advice: %s, \n index: %s\n",query.data,indexDef.data);
 			if (es != NULL) { appendStringInfo(es->str, "read only, advice, index: %s\n",indexDef.data); }
-			
+
 			elog( DEBUG1, "SPI connection start - save advice");
 			if( SPI_connect() == SPI_OK_CONNECT )
 			{
 				elog( DEBUG1 , "IND ADV: store_idx_advice: build the insert query %s",query.data);
 				if( SPI_execute( query.data, false, 0 ) != SPI_OK_INSERT )
-						elog( WARNING, "IND ADV: SPI_execute failed while saving advice." );			
-				
+						elog( WARNING, "IND ADV: SPI_execute failed while saving advice." );
+
 				elog( DEBUG1, "SPI connection finish");
 				if( SPI_finish() != SPI_OK_FINISH )
 					elog( WARNING, "IND ADV: SPI_finish failed while saving advice." );
@@ -1334,13 +1334,13 @@ static void store_idx_advice( List* candidates , ExplainState * 	es )
 			else
 				elog( WARNING, "IND ADV: SPI_connect failed while saving advice." );
 		}
-	} 
+	}
 
-	
+
 	/* TODO: Propose to -hackers to introduce API to free a StringInfoData . */
 	if ( query.len > 0 )
 		pfree( query.data );
-	
+
 	if ( cols.len > 0 )
 		pfree( cols.data );
 
@@ -1357,7 +1357,7 @@ static void store_idx_advice( List* candidates , ExplainState * 	es )
 		pfree( partialClause.data );
 	if ( indexDef.len > 0 )
 		pfree( indexDef.data );
-	
+
 
 	elog( DEBUG3, "IND ADV: store_idx_advice: EXIT" );
 }
@@ -1385,14 +1385,14 @@ static List* remove_irrelevant_candidates( List* candidates )
 	{
 		ListCell *old_cell = cell;
 
-		Oid base_rel_oid = ((IndexCandidate*)lfirst( cell ))->reloid;		
+		Oid base_rel_oid = ((IndexCandidate*)lfirst( cell ))->reloid;
 		Relation base_rel = heap_open( base_rel_oid, AccessShareLock );
 
 		/* decide if the relation is unsupported. This check is now done before
 		 * creating a candidate in scan_generic_node(); but still keeping the
 		 * code here.
 		 */
-		// if((base_rel->rd_istemp == true) replaced 
+		// if((base_rel->rd_istemp == true) replaced
                 if((!RelationNeedsWAL(base_rel))
 			|| IsSystemRelation(base_rel))
 		{
@@ -1548,7 +1548,7 @@ static List* remove_irrelevant_candidates( List* candidates )
  */
 static void tag_and_remove_candidates(Cost startupCostSaved, Cost totalCostSaved,PlannedStmt		*new_plan, const Node* const head,List* const candidates)
 {
-	
+
 	if( startupCostSaved >0 || totalCostSaved > 0 )
 	{
 		/* scan the plan for virtual indexes used */
@@ -1560,7 +1560,7 @@ static void tag_and_remove_candidates(Cost startupCostSaved, Cost totalCostSaved
 
 		plannedStmtGlobal = NULL;
 	}
-	
+
 	elog( DEBUG3, "IND ADV: Remove unused candidates from the list" );
 	/* Remove unused candidates from the list. */
 	/*for( prev = NULL, cell = list_head(candidates);
@@ -1591,7 +1591,7 @@ static void mark_used_candidates(const Node* const node, List* const candidates)
 	const ListCell	*cell;
 	bool			planNode = true;	/* assume it to be a plan node */
 
-	elog( DEBUG3, "IND ADV: mark_used_candidates: ENTER" );	
+	elog( DEBUG3, "IND ADV: mark_used_candidates: ENTER" );
 
      //TODO: remove this
 	//foreach( cell, candidates )
@@ -1624,7 +1624,7 @@ static void mark_used_candidates(const Node* const node, List* const candidates)
 
 			}
 		}
-		break;		
+		break;
 		case T_IndexOnlyScan: // TAG: 110
 		{
 			/* are there any used virtual-indexes? */
@@ -1696,7 +1696,7 @@ static void mark_used_candidates(const Node* const node, List* const candidates)
 			mark_used_candidates( (const Node*)subScan->subplan, candidates );
 		}
 		break;
-		
+
 		case T_NestLoop:
 		case T_MergeJoin:
 		case T_HashJoin:
@@ -1774,8 +1774,8 @@ static void mark_used_candidates(const Node* const node, List* const candidates)
 		case T_Limit:
 		case T_Scan:
 		case T_SeqScan:
-		case T_BitmapHeapScan:	
-		
+		case T_BitmapHeapScan:
+
 		break;
 
 		case T_AlternativeSubPlan:
@@ -1851,7 +1851,7 @@ static void mark_used_candidates(const Node* const node, List* const candidates)
 /**
  * scan_query
  *    Runs thru the whole query to find columns to create index candidates.
- *   Note: We do not use the query_tree_walker here because it doesn't go into 
+ *   Note: We do not use the query_tree_walker here because it doesn't go into
  * GROUP BY, ORDER BY, and we also add aditional handeling of inheritence table expension.
  */
 static List* scan_query(	const Query* const query,
@@ -1862,7 +1862,7 @@ static List* scan_query(	const Query* const query,
 	List*		candidates		= NIL;
 	List*		newCandidates	= NIL;
 
-	elog( DEBUG4, "IND ADV: scan_query: ENTER" );	
+	elog( DEBUG4, "IND ADV: scan_query: ENTER" );
 
 	/* add the current rangetable to the stack */
 	rangeTableStack = lcons( query->rtable, rangeTableStack );
@@ -1873,8 +1873,8 @@ static List* scan_query(	const Query* const query,
 	foreach( cell, query->cteList )
 	{
 		const CommonTableExpr* const rte = (const CommonTableExpr*)lfirst( cell );
-		elog( DEBUG3 , "IND ADV: scan_query: CTE working on: %s",rte->ctename);		
-		
+		elog( DEBUG3 , "IND ADV: scan_query: CTE working on: %s",rte->ctename);
+
 		if( rte->ctequery )
 		{
 			elog_node_display( DEBUG4 , "CTE query", rte->ctequery,true);
@@ -1884,14 +1884,14 @@ static List* scan_query(	const Query* const query,
 										rangeTableStack));
 		}
 	}
-	
+
 	/* scan sub-queries */
 	foreach( cell, query->rtable )
 	{
 		const RangeTblEntry* const rte = (const RangeTblEntry*)lfirst( cell );
-		elog( DEBUG3 , "IND ADV: scan_query: SUB working on: %s",rte->eref->aliasname);		
-		//elog( DEBUG3 , "IND ADV: scan_query: working on: %d",rte->rtekind);		
-		
+		elog( DEBUG3 , "IND ADV: scan_query: SUB working on: %s",rte->eref->aliasname);
+		//elog( DEBUG3 , "IND ADV: scan_query: working on: %d",rte->rtekind);
+
 		if( rte->subquery )
 		{
 			elog_node_display( DEBUG4 , "sub query", rte->subquery,true);
@@ -1900,12 +1900,12 @@ static List* scan_query(	const Query* const query,
 										opnos,
 										rangeTableStack));
 		}
-		
+
 		/* adding support for join clause */
 		if (rte->joinaliasvars)
 		{
-			//elog( DEBUG3 , "IND ADV: scan_query: join");	
-			//elog( DEBUG3 , "IND ADV: scan_query: join type : %d",rte->jointype);					
+			//elog( DEBUG3 , "IND ADV: scan_query: join");
+			//elog( DEBUG3 , "IND ADV: scan_query: join type : %d",rte->jointype);
 			//elog_node_display( DEBUG4 , "sub query", rte->joinaliasvars,true);
 			candidates = merge_candidates( candidates, scan_generic_node( rte->joinaliasvars,
 							opnos,
@@ -1917,7 +1917,7 @@ static List* scan_query(	const Query* const query,
 	if( query->jointree->quals != NULL )
 	{
 		newCandidates = scan_generic_node(	query->jointree->quals, opnos,
-							rangeTableStack );		
+							rangeTableStack );
 	}
 
 	/* FIXME: Why don't we consider the GROUP BY and ORDER BY clause
@@ -2047,7 +2047,7 @@ static bool index_candidates_walker (Node *root, ScanContext *context)
        return false;
    	// check for nodes that special work is required for, eg:
 
-	
+
 	elog( DEBUG4, "IND ADV: scan_generic_node, tag: %d", nodeTag( root ));
 	switch( nodeTag( root ) )
 	{
@@ -2094,7 +2094,7 @@ static bool index_candidates_walker (Node *root, ScanContext *context)
 			return false;
 		}
 		break;
-		
+
 		/* if the node is an operator */
 		case T_OpExpr:
 		{
@@ -2121,12 +2121,12 @@ static bool index_candidates_walker (Node *root, ScanContext *context)
 						if (rte->rtekind == RTE_CTE) break; // break if working on CTE.
                         RelClause* rc = NULL;
 						char *token = NULL;
-						
+
                         elog( DEBUG3 , "IND ADV: OpExpr: working on: %s",rte->eref->aliasname);
                         char *varname = get_relid_attribute_name(rte->relid, e->varattno);
                         elog( DEBUG3 , "IND ADV: OpExpr: working on: %d",rte->relid);
 			char *token_str = strdup(idxadv_columns);
-						
+
 			elog( DEBUG1 , "IND ADV: OpExpr: check right var, %s, cols: %s",varname,idxadv_columns);
 			token = strtok(token_str, ",");
 			elog( DEBUG1 , "IND ADV: token %s",token);
@@ -2135,7 +2135,7 @@ static bool index_candidates_walker (Node *root, ScanContext *context)
 				token = strtok(NULL, ",");
 				elog( DEBUG4 , "IND ADV: token %s",token);
 			}
-                        						
+
                         if (foundToken)
                         {
                             ListCell* relPredicates = get_rel_clausesCell(table_clauses, rte->relid,rte->eref->aliasname);
@@ -2154,7 +2154,7 @@ static bool index_candidates_walker (Node *root, ScanContext *context)
                                     rc->predicate = lappend(rc->predicate,(Expr *)makePredicateClause((Expr *) root, (Const*) f, (Var*) s));
                                 }
                                 elog( DEBUG4 , "IND ADV: created the clause");
-                                
+
                                 table_clauses = lappend(table_clauses, rc );
                             }else{
                                 //use the existing rc
@@ -2183,12 +2183,12 @@ static bool index_candidates_walker (Node *root, ScanContext *context)
 				if(! foundToken){
 					foreach( cell, expr->args )
 					{
-						const Node* const node = (const Node*)lfirst( cell );															
+						const Node* const node = (const Node*)lfirst( cell );
 
 						context->candidates = merge_candidates( context->candidates,
 												scan_generic_node( node, context->opnos,
 																context->rangeTableStack));
-					
+
 					}
 				}
 			}
@@ -2201,9 +2201,9 @@ static bool index_candidates_walker (Node *root, ScanContext *context)
 		{
 			const Var* const expr = (const Var*)root;
 			List* rt = list_nth( context->rangeTableStack, expr->varlevelsup );
-			const RangeTblEntry* rte = list_nth( rt, expr->varno - 1 );			
+			const RangeTblEntry* rte = list_nth( rt, expr->varno - 1 );
 
-			elog( DEBUG3 , "index candidate - var: %d rtekind: %d",expr->varattno,rte->rtekind);			
+			elog( DEBUG3 , "index candidate - var: %d rtekind: %d",expr->varattno,rte->rtekind);
 
 			/* only relations have indexes */
 			if( rte->rtekind == RTE_RELATION )
@@ -2219,7 +2219,7 @@ static bool index_candidates_walker (Node *root, ScanContext *context)
 					//TODO: Do we really need these checks?
 					//&& base_rel->rd_rel->relpages > 1
 					//&& base_rel->rd_rel->reltuples > 1
-					) 
+					)
 				{
 					/* create index-candidate and build a new list */
 					int				i;
@@ -2232,7 +2232,7 @@ static bool index_candidates_walker (Node *root, ScanContext *context)
 					cand->varlevelsup   = expr->varlevelsup;
 					cand->ncols         = 1;
 					cand->reloid        = rte->relid;
-					cand->erefAlias     = pstrdup(rte->eref->aliasname);					
+					cand->erefAlias     = pstrdup(rte->eref->aliasname);
 					cand->inh			= rte->inh;
 					elog( DEBUG3 , "index candidate - rel: %s, inh: %s",cand->erefAlias,BOOL_FMT(rte->inh));
 					cand->vartype[ 0 ]  = expr->vartype;
@@ -2271,7 +2271,7 @@ static bool index_candidates_walker (Node *root, ScanContext *context)
 		{
 		  elog(DEBUG4, "IDX_ADV: inside T_MinMaxExpr func");
 		}break;
-#if PG_VERSION_NUM >= 90400
+#if PG_VERSION_NUM >= 90500
 		case T_GroupingFunc:
 		{
 		  elog(DEBUG4, "IDX_ADV: inside grouping func");
@@ -2287,7 +2287,7 @@ static bool index_candidates_walker (Node *root, ScanContext *context)
 				IndexElem *ind_elm = palloc0(sizeof(IndexElem));
 				FuncExpr* expr = (FuncExpr*) palloc0(sizeof(FuncExpr));
 				Node       *func_var; /* use this to find the relation info*/
-				
+
 				elog(DEBUG4, "IND ADV: duplicate func expr properties.");
 				expr->xpr = ((const FuncExpr*)root)->xpr;
 				expr->funcid = ((const FuncExpr*)root)->funcid;
@@ -2312,7 +2312,7 @@ static bool index_candidates_walker (Node *root, ScanContext *context)
 				//ind_elm->ordering = SORTBY_DEFAULT ;
 				//ind_elm->nulls_ordering = SORTBY_NULLS_DEFAULT ;
 
-				
+
 
 				/* TODO: support func indexes.
 				* currently we only support functions with variables on the first parameter.
@@ -2320,7 +2320,7 @@ static bool index_candidates_walker (Node *root, ScanContext *context)
 				*/
 				//	indexInfo->ii_KeyAttrNumbers[attn] = 0; /* marks expression */
 				//  indexInfo->ii_Expressions = lappend(indexInfo->ii_Expressions, expr);
-				
+
 				// get to the buttom Var
 				elog( DEBUG4 , "index candidate - get to buttom var");
 				if(list_length(expr->args)==0) { break;} // don't create indexes for expressions with no variables
@@ -2378,7 +2378,7 @@ static bool index_candidates_walker (Node *root, ScanContext *context)
 				//		&& strcmp(varname,IDX_ADV_PART_COL)!=0 )
 				//	{
 				//		/* create index-candidate and build a new list */
-						
+
 
 				//		cand->varno         = expr->varno;
 						cand->varlevelsup   = ((Var *)func_var)->varlevelsup;
@@ -2399,7 +2399,7 @@ static bool index_candidates_walker (Node *root, ScanContext *context)
 							cand->varattno[i] = 0;
 
 
-						
+
 				//	}
 
 				//	heap_close( base_rel, AccessShareLock );
@@ -2411,15 +2411,15 @@ static bool index_candidates_walker (Node *root, ScanContext *context)
 				context->candidates = list_make1( cand );
 				return false;
 			}
-			break;	
+			break;
 			/* default:
 			{
 				elog( DEBUG4 , "IDX ADV: tree walker - reached the default handler ");
 				elog(ERROR, "unrecognized node type: %d",(int) nodeTag(root));
-			}			
+			}
 			break; */
 	}
-	
+
 	elog( DEBUG4, "IND ADV: scan_generic_node: EXIT" );
 
 
@@ -2595,7 +2595,7 @@ merge_candidates( List* list1, List* list2 )
 
 	elog( DEBUG1, "IND ADV: ---merge_candidates---" );
 	log_candidates( "idxcd-list1", list1 );
-	log_candidates( "idxcd-list2", list2 );	
+	log_candidates( "idxcd-list2", list2 );
 
 	if( list_length( list1 ) == 0 )
 		return list2;
@@ -2606,7 +2606,7 @@ merge_candidates( List* list1, List* list2 )
         if ( list1 == list2 ) return list1;
 
 	ret = NIL;
-	prev2 = NULL;	
+	prev2 = NULL;
 
 	for( cell1 = list_head(list1), cell2 = list_head(list2);
 		(cell1 != NULL) && (cell2 != NULL); )
@@ -2643,7 +2643,7 @@ merge_candidates( List* list1, List* list2 )
 			cell2 = lnext( cell2 );
 		}
 	}
-        
+
         elog( DEBUG4, "IDX_ADV: so far we have: %d",list_length( ret ));
          log_candidates( "so far: ", ret );
 
@@ -2726,7 +2726,7 @@ static List* expand_inherited_candidates(List* list)
 			cic->erefAlias      = pstrdup(cand->erefAlias);
 			cic->idxused		= false;
 			cic->parentOid		= cand->reloid;
-			
+
             elog( DEBUG3, "expand_inherited_candidates: start att copy, ncols: %d", cand->ncols);
 			/* copy attributes of the candidate to the inherited candidate 	*/
 			for( i = 0; i < cand->ncols; ++i)
@@ -2734,23 +2734,23 @@ static List* expand_inherited_candidates(List* list)
 				cic->vartype[ i ]	= cand->vartype[ i ];
 				cic->varattno[ i ] = cand->varattno[ i ];
 				cic->varname[ i ] = cand->varname[ i ];
-			}							
+			}
 
 			/* set remaining attributes to null */
 			for( i = cand->ncols ;	i < INDEX_MAX_KEYS;	++i )
 			{
 				cic->varattno[ i ] = 0;
-							
+
 			}
 
 			/* cope index experessions for the new composite indexes */
 			cic->attList = list_copy(cand->attList);
 			elog(DEBUG3,"expand_inherited_candidates: start att copy,attlist cic: %d ",list_length(cic->attList));
 			newCandidates = lappend(newCandidates, cic);
-							
+
 		}
 	}
-	
+
 	list_free(list);
 	elog(DEBUG3,"expand_inherited_candidates: Exit - length: %d",list_length(newCandidates));
 	return newCandidates;
@@ -2765,14 +2765,14 @@ static void expand_inherited_rel_clauses()
 	ListCell *cell;
 	LOCKMODE    lockmode = NoLock;
 	RelClause *cand;
-	List       *inhOIDs;	
+	List       *inhOIDs;
 	ListCell   *l;
 
 	elog(DEBUG3,"expand_inherited_rel_clauses: Enter - length: %d",list_length(table_clauses));
 	for( cell = list_head(table_clauses); (cell != NULL) ; cell = lnext( cell ))
 	{
 		cand = ((RelClause*)lfirst( cell ));
-		
+
 		elog(DEBUG3,"expand_inherited_rel_clauses: inh expending");
 		/* Scan for all members of inheritance set, acquire needed locks */
 		//inhOIDs = find_all_inheritors(cand->reloid, lockmode, NULL);
@@ -2785,7 +2785,7 @@ static void expand_inherited_rel_clauses()
 		if (list_length(inhOIDs) < 1)
 		{
 			/* Clear flag before returning */
-			elog(DEBUG3,"expand_inherited_rel_clauses: not enough inh -> skipping");			
+			elog(DEBUG3,"expand_inherited_rel_clauses: not enough inh -> skipping");
 			continue;
 		}
 
@@ -2794,20 +2794,20 @@ static void expand_inherited_rel_clauses()
 		{
 			//int i;
 			Oid         childOID = lfirst_oid(l);
-			RelClause* cic = (RelClause*)palloc(sizeof(RelClause));			
-			
+			RelClause* cic = (RelClause*)palloc(sizeof(RelClause));
+
 			//Relation base_rel = heap_open( childOID, AccessShareLock );
-			/* init some members of composite candidate 1 */			
+			/* init some members of composite candidate 1 */
 			cic->reloid			= childOID;
-			cic->erefAlias      = cand->erefAlias; 		
+			cic->erefAlias      = cand->erefAlias;
 			elog(DEBUG3,"expand_inherited_rel_clauses: create chield clause for %d, name: %s",childOID,cic->erefAlias);
-			            			
+
 			/* cope table clause experessions for the new cheild table */
-			cic->predicate = list_copy(cand->predicate);			
-			table_clauses = lappend(table_clauses, cic);							
+			cic->predicate = list_copy(cand->predicate);
+			table_clauses = lappend(table_clauses, cic);
 		}
-	}		
-	elog(DEBUG3,"expand_inherited_rel_clauses: Exit - length: %d",list_length(table_clauses));	
+	}
+	elog(DEBUG3,"expand_inherited_rel_clauses: Exit - length: %d",list_length(table_clauses));
 }
 
 
@@ -2977,7 +2977,7 @@ build_composite_candidates( List* list1, List* list2 )
 								cic1->varattno[cand1->ncols + i1]
 									= cic2->varattno[ i1 ]
 									= cand2->varattno[ i1 ];
-								
+
 								cic1->varname[cand1->ncols + i1]
                                     = cic2->varname[ i1 ]
 				                    = cand2->varname[ i1 ];
@@ -2996,7 +2996,7 @@ build_composite_candidates( List* list1, List* list2 )
 							cic1->attList = list_concat_unique(cand1->attList,cand2->attList);
 							cic2->attList = list_concat_unique(cand2->attList,cand1->attList);
 							elog(DEBUG3,"build_composite_candidates: start att copy,attlist cic1: %d, cic2: %d ",list_length(cic1->attList),list_length(cic2->attList));
-							
+
 							/* add new composite candidates to list */
 							cmp = compare_candidates(cic1, cic2);
 
@@ -3099,7 +3099,7 @@ static List* create_virtual_indexes( List* candidates )
 		//  indexInfo->ii_Predicate	    = NIL;
 		//	indexInfo->ii_KeyAttrNumbers[attn] = 0; /* marks expression */
 		elog( DEBUG4, "IND ADV: create_virtual_indexes: add the predicate list to the index, length %d, ncols: %d", list_length(cand->attList),cand->ncols);
-		
+
 		indexInfo->ii_Expressions = list_concat_unique(indexInfo->ii_Expressions, cand->attList);
 
 		//elog_node_display( DEBUG2 , "index_create - func: ", (Node*)indexInfo->ii_Expressions,true);
@@ -3112,12 +3112,12 @@ static List* create_virtual_indexes( List* candidates )
 			op_class[i] = GetDefaultOpClass( cand->vartype[ i ], BTREE_AM_OID );
 			/* Replace text_ops with text_pattern_ops */
 			if (op_class[i]==3126){
-				idxadv_text_pattern_ops?op_class[i] = 10049:NULL; 
+				idxadv_text_pattern_ops?op_class[i] = 10049:NULL;
                                 //  see pg_opclass.oid - this actually works, changes to text_pattern_ops instead of pattern ops (in te strangest way ever... see: http://doxygen.postgresql.org/indxpath_8c_source.html#l03403)
 				// TODO: find a way to get this via SYSCACHE instead of fixed numbers (or at least make CONSTS)
 				collationObjectId[i] = DEFAULT_COLLATION_OID ; //100; // need to figure this out - 100 is the default but doesn't pass for some reason...
 			}
-			
+
 
 			if( op_class[i] == InvalidOid )
 				/* don't create this index if couldn't find a default operator*/
@@ -3149,7 +3149,7 @@ static List* create_virtual_indexes( List* candidates )
 		// CHECK: get Relation from  cand->reloid
 		Relation relation = heap_open( cand->reloid, AccessShareLock );
         elog( DEBUG4, "IND ADV: create_virtual_indexes: create the index" );
-		
+
 		/* create the index without data */
 		cand->idxoid = index_create( relation
 					, idx_name
@@ -3184,11 +3184,11 @@ static List* create_virtual_indexes( List* candidates )
 			cand->op_class[i] = op_class[i];
 			cand->collationObjectId[i] = collationObjectId[i];
 		}
-		
+
 
 		elog( DEBUG4, "IND ADV: virtual index created: oid=%d name=%s size=%d",
 					cand->idxoid, idx_name, cand->pages );
-	
+
 		/* close the heap */
         heap_close(relation, AccessShareLock);
 		elog( DEBUG4, "IND ADV: create_virtual_indexes: numindex %d",list_length( RelationGetIndexList(relation)));
@@ -3381,7 +3381,7 @@ static List *build_index_tlist(PlannerInfo *root, IndexOptInfo *index, Relation 
         Index           varno = index->rel->relid;
         ListCell   *indexpr_item;
         int                     i;
-		
+
 		elog(DEBUG1, "build_index_tlist: Enter, ncols: %d, indexpr: %d",index->ncolumns,list_length(index->indexprs));
         indexpr_item = list_head(index->indexprs);
         for (i = 0; i < index->ncolumns; i++)
@@ -3413,11 +3413,11 @@ static List *build_index_tlist(PlannerInfo *root, IndexOptInfo *index, Relation 
                         /* expression column */
                         if (indexpr_item == NULL)
                                 elog(ERROR, "wrong number of index expressions - expressions column not defined properly");
-                        indexvar = (Expr *) lfirst(indexpr_item);						
+                        indexvar = (Expr *) lfirst(indexpr_item);
                         indexpr_item = lnext(indexpr_item);
 						elog(DEBUG4, "build_index_tlist: in loop advance  indexpr_item");
 						if (indexpr_item != NULL){
-							elog(DEBUG4, "   more to advance...");							
+							elog(DEBUG4, "   more to advance...");
 						}
 
                 }
@@ -3428,9 +3428,9 @@ static List *build_index_tlist(PlannerInfo *root, IndexOptInfo *index, Relation 
                                                 NULL,
                                                 false));
         }
-        if (indexpr_item != NULL){			
+        if (indexpr_item != NULL){
             elog(ERROR, "wrong number of index expressions - ncols not setup properly");
-				
+
 		}
 
         return tlist;
