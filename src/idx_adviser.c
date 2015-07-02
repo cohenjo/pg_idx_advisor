@@ -563,7 +563,7 @@ static PlannedStmt* index_adviser(	Query*			queryCopy,
 	if( SPI_finish() != SPI_OK_FINISH )
 		elog( WARNING, "IND ADV: SPI_finish failed." );
 
-	elog( DEBUG1, "IND ADV: save the advice into the table" );
+	elog( DEBUG1, "IDX_ADV: save the advice into the table" );
 	/* save the advise into the table */
 	if( saveCandidates )
 	{
@@ -877,7 +877,7 @@ static void get_relation_info_callback(	PlannerInfo	*root,
 			info->indexkeys[i] = 0;
 		}
 
-		//info->relam = indexRelation->rd_rel->relam;
+		info->relam = indexRelation->rd_rel->relam;
 
 		elog( DEBUG4 ,"IND ADV: amcostestimate=%d",info->amcostestimate);
 		if(info->amcostestimate == InvalidOid)
@@ -889,14 +889,14 @@ static void get_relation_info_callback(	PlannerInfo	*root,
 		info->canreturn = index_can_return(indexRelation);
 #endif
 		info->amcanorderbyop = indexRelation->rd_am->amcanorderbyop;
-		//info->amoptionalkey = indexRelation->rd_am->amoptionalkey;
+		info->amoptionalkey = indexRelation->rd_am->amoptionalkey;
 		info->amsearcharray = indexRelation->rd_am->amsearcharray;
-		//info->amsearchnulls = indexRelation->rd_am->amsearchnulls;
+		info->amsearchnulls = indexRelation->rd_am->amsearchnulls;
 		info->amhasgettuple = OidIsValid(indexRelation->rd_am->amgettuple);
 		info->amhasgetbitmap = OidIsValid(indexRelation->rd_am->amgetbitmap);
 
-        info->amoptionalkey = false;
-        info->amsearchnulls = false;
+                //info->amoptionalkey = false;
+                //info->amsearchnulls = false;
 
 		/*
 		* v9.4 introduced a concept of tree height for btree, we'll use unkonown for now
@@ -909,8 +909,8 @@ static void get_relation_info_callback(	PlannerInfo	*root,
 		* Fetch the ordering information for the index, if any.
 		*/
                 // TODO: how to handle non BTREE ops (support other index types, see: get_relation_info: plancat.c:88)
-		//if (info->relam == BTREE_AM_OID)
-		if ( 1 == 1)
+		if (info->relam == BTREE_AM_OID)
+		//if ( 1 == 1)
 		{
 			elog( DEBUG3 , "IND ADV: in BTREE_AM_OID");
 			/*
@@ -1246,6 +1246,7 @@ static void store_idx_advice( List* candidates , ExplainState * 	es )
 		indexpr_item = list_head(idxcd->attList);
 		context = deparse_context_for(idxcd->erefAlias, idxcd->reloid);
 
+                //elog( DEBUG2 , "IDX_ADV: store_idx_advice: num cols: %d ",idxcd->ncols);
 		for (i = 0; i < idxcd->ncols; ++i){
 			Oid         keycoltype;
 
@@ -1589,7 +1590,7 @@ static void tag_and_remove_candidates(Cost startupCostSaved, Cost totalCostSaved
 static void mark_used_candidates(const Node* const node, List* const candidates)
 {
 	const ListCell	*cell;
-	bool			planNode = true;	/* assume it to be a plan node */
+	bool  planNode = true;	/* assume it to be a plan node */
 
 	elog( DEBUG3, "IND ADV: mark_used_candidates: ENTER" );
 
@@ -1762,6 +1763,7 @@ static void mark_used_candidates(const Node* const node, List* const candidates)
 		case T_RecursiveUnion:
 		case T_Result:
 		case T_Append:
+		case T_MergeAppend:
 		case T_TidScan:
 		case T_Material:
 		case T_Sort:
@@ -1781,8 +1783,10 @@ static void mark_used_candidates(const Node* const node, List* const candidates)
 		case T_AlternativeSubPlan:
 		case T_FuncExpr:
 		case T_Const:
+		case T_MinMaxExpr:
 		case T_CoerceViaIO:
 		case T_ArrayCoerceExpr:
+                case T_NullTest:
 		case T_Var:
 			planNode = false;
 		break;
@@ -1828,6 +1832,18 @@ static void mark_used_candidates(const Node* const node, List* const candidates)
 				mark_used_candidates( (Node*)child, candidates );
 			}
 		}
+                if( IsA(((Node*)plan), MergeAppend) )
+                {
+                        MergeAppend  *appendplan = (MergeAppend *)node;
+                        ListCell *cell;
+
+                        foreach( cell, appendplan->mergeplans )
+                        {
+                                Plan *child = (Plan*)lfirst( cell );
+
+                                mark_used_candidates( (Node*)child, candidates );
+                        }
+                }
 
 
 		/* scan left- and right-tree */
