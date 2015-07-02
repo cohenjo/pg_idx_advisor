@@ -1,6 +1,6 @@
 set client_min_messages to log;
 
-load '$libdir/plugins/pg_idx_advisor.so';
+load 'pg_idx_advisor.so';
 
 
 drop table if exists t, t1;
