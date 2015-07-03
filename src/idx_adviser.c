@@ -563,7 +563,7 @@ static PlannedStmt* index_adviser(	Query*			queryCopy,
 	if( SPI_finish() != SPI_OK_FINISH )
 		elog( WARNING, "IND ADV: SPI_finish failed." );
 
-	elog( DEBUG1, "IND ADV: save the advise into the table" );
+	elog( DEBUG1, "IND ADV: save the advice into the table" );
 	/* save the advise into the table */
 	if( saveCandidates )
 	{
