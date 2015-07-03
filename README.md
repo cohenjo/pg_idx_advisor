@@ -3,7 +3,7 @@
 
 [![PGXN version](https://badge.fury.io/pg/pg_idx_advisor.svg)](https://badge.fury.io/pg/pg_idx_advisor)
 
-A PostgreSQL extension to analyze queries and give indexing advise.
+A PostgreSQL extension to analyze queries and give indexing advice.
 
 ## Introduction ##
 The index advisor uses the virtual index framework/support built into PG
