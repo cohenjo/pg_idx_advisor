@@ -3,7 +3,7 @@ create table index_advisory( reloid	 oid,
 	benefit		real,
 	index_size	integer,
 	backend_pid	integer,
-	timestamp	timestamptz,	
+	timestamp	timestamptz,
 	indcollation int[], -- oidvector
 	indclass	int[],
 	indoption	int[],
@@ -14,3 +14,4 @@ create table index_advisory( reloid	 oid,
 
 create index IA_reloid on index_advisory( reloid );
 create index IA_backend_pid on index_advisory( backend_pid );
+Load 'pg_idx_advisor';
