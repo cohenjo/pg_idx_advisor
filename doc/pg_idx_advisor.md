@@ -7,7 +7,7 @@ Synopsis
 create extension pg_idx_advisor;
 CREATE EXTENSION
 
-load '$libdir/plugins/pg_idx_advisor.so';
+load 'pg_idx_advisor.so';
 NOTICE:  IND ADV: plugin loaded
 LOAD
 
@@ -47,7 +47,7 @@ Usage
 -----
 
 First you must load the library using the 'LOAD' command:
-`Load '$pglibdir/pg_idx_advisor.so'`
+`Load 'g_idx_advisor.so'`
 simply run the query with the "explain" - you will see both the original execution plan as well as the new plan with the suggested Virtual/Hypothetical indexes.
 
 Examples:
