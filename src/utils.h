@@ -29,6 +29,7 @@
 #include "catalog/pg_statistic.h"
 #include "catalog/pg_type.h"
 #include "catalog/pg_opclass.h"
+#include "catalog/namespace.h"
 #include "executor/executor.h"
 #include "mb/pg_wchar.h"
 #include "nodes/makefuncs.h"
@@ -80,7 +81,7 @@ Configuration* parse_config_file(const char *filename, const char *cols, const b
 void get_opclass_name(Oid opclass, Oid actual_datatype, StringInfo buf);
 extern double var_eq_cons(VariableStatData *vardata, Oid operator,Datum constval, bool constisnull,bool varonleft);
 //void dump_trace();
-List* create_operator_list(char *SupportedOps);
+List* create_operator_list(char *SupportedOps[]);
 #define BOOL_FMT(bool_expr) (bool_expr) ? "true" : "false"
 
 #endif   /* UTILS_H */
