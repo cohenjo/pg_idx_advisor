@@ -420,11 +420,15 @@ static PlannedStmt* index_adviser(	Query*			queryCopy,
 	 */
 	elog( DEBUG1, "About to call SPI connect - push SPI first");
         //SPI_push();
+        if (SPI_push_conditional())
+        {
+            elog( DEBUG1, "pushed SPI" );
+        }
 	elog( DEBUG1, "SPI connection start - TODO FIX THIS!!");
 	if( SPI_connect() != SPI_OK_CONNECT )
 	{
 		elog( WARNING, "IND ADV: SPI_connect() call failed - pre virtual index creation." );
-		goto DoneCleanly;
+	//	goto DoneCleanly;
 	}
 
 	/*
