@@ -309,7 +309,9 @@ static PlannedStmt* index_adviser(	Query*			queryCopy,
 	bool		saveCandidates = false;
 	int			i;
 	ListCell	*cell;
-	List*       opnos = NIL;			  /* contains all vaild operator-ids */
+	List*       opnos = NIL;			  /* contains all valid operator-ids */
+	List*       ginopnos = NIL;			  /* contains all valid gin-operator-ids */
+	List*       gistopnos = NIL;			  /* contains all valid gist-operator-ids */
 	List*		candidates = NIL;				  /* the resulting candidates */
 
 	Cost		actualStartupCost;
@@ -327,7 +329,8 @@ static PlannedStmt* index_adviser(	Query*			queryCopy,
 
 
 	char *SupportedOps[] = { "=", "<", ">", "<=", ">=", "~~", }; /* Added support for LIKE ~~ */
-
+	char *SupportedGistOps[] = { "<<", "&<", "&>", ">>", "<<|", "&<|", "|&>", "|>>", "@>", "<@", "~=", "&&", }; 
+	char *SupportedGinOps[] = { "<@", "@>", "=", "&&", }; 
 
 	elog( DEBUG3, "IND ADV: Entering" );
 
@@ -355,31 +358,34 @@ static PlannedStmt* index_adviser(	Query*			queryCopy,
 	elog( DEBUG2 , "IND ADV: actual plan costs: %lf .. %lf",actualStartupCost,actualTotalCost);
 
 	/* create list containing all operators supported by the index advisor */
-	for( i=0; i < lengthof(SupportedOps); ++i )
-	{
-		FuncCandidateList   opnosResult;
+	// for( i=0; i < lengthof(SupportedOps); ++i )
+	// {
+		// FuncCandidateList   opnosResult;
 
-		List* supop = list_make1( makeString( SupportedOps[i] ) );
+		// List* supop = list_make1( makeString( SupportedOps[i] ) );
 
-		/*
-		 * collect operator ids into an array.
-		 */
-		for(	opnosResult = OpernameGetCandidates( supop, '\0'
-#if PG_VERSION_NUM >= 90400
-                                                           , true
-#endif
-                                                           );
-				opnosResult != NULL;
-				opnosResult = lnext(opnosResult) )
-		{
-			//elog(DEBUG2, "opno: %d, %s",opnosResult->oid ,SupportedOps[i]);
-			opnos = lappend_oid( opnos, opnosResult->oid );
-		}
+		// /*
+		 // * collect operator ids into an array.
+		 // */
+		// for(	opnosResult = OpernameGetCandidates( supop, '\0'
+// #if PG_VERSION_NUM >= 90400
+                                                           // , true
+// #endif
+                                                           // );
+				// opnosResult != NULL;
+				// opnosResult = lnext(opnosResult) )
+		// {
+			// elog(DEBUG2, "opno: %d, %s",opnosResult->oid ,SupportedOps[i]);
+			// opnos = lappend_oid( opnos, opnosResult->oid );
+		// }
 
-		/* free the Value* (T_String) and the list */
-		pfree( linitial( supop ) );
-		list_free( supop );
-	}
+		// /* free the Value* (T_String) and the list */
+		// pfree( linitial( supop ) );
+		// list_free( supop );
+	// }
+	opnos = create_operator_list(SupportedOps) ;
+	ginopnos = create_operator_list(SupportedGinOps) ;
+	gistopnos = create_operator_list(SupportedGistOps) ;
 
 	elog( DEBUG3, "IND ADV: Generate index candidates" );
 	/* Generate index candidates */
@@ -387,6 +393,8 @@ static PlannedStmt* index_adviser(	Query*			queryCopy,
 
 	/* the list of operator oids isn't needed anymore */
 	list_free( opnos );
+	list_free( ginopnos );
+	list_free( gistopnos );
 
 	if (list_length(candidates) == 0)
 		goto DoneCleanly;
@@ -2145,16 +2153,16 @@ static bool index_candidates_walker (Node *root, ScanContext *context)
                         elog( DEBUG3 , "IND ADV: OpExpr: working on: %s",rte->eref->aliasname);
                         char *varname = get_relid_attribute_name(rte->relid, e->varattno);
                         elog( DEBUG3 , "IND ADV: OpExpr: working on: %d",rte->relid);
-			char *token_str = strdup(idxadv_columns);
+						char *token_str = strdup(idxadv_columns);
 
-			elog( DEBUG1 , "IND ADV: OpExpr: check right var, %s, cols: %s",varname,idxadv_columns);
-			token = strtok(token_str, ",");
-			elog( DEBUG1 , "IND ADV: token %s",token);
-			while (token && ! foundToken){
-				foundToken = (strcmp(token,varname)==0) ? true : false ;
-				token = strtok(NULL, ",");
-				elog( DEBUG4 , "IND ADV: token %s",token);
-			}
+						elog( DEBUG1 , "IND ADV: OpExpr: check right var, %s, cols: %s",varname,idxadv_columns);
+						token = strtok(token_str, ",");
+						elog( DEBUG1 , "IND ADV: token %s",token);
+						while (token && ! foundToken){
+							foundToken = (strcmp(token,varname)==0) ? true : false ;
+							token = strtok(NULL, ",");
+							elog( DEBUG4 , "IND ADV: token %s",token);
+						}
 
                         if (foundToken)
                         {
