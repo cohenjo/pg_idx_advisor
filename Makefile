@@ -1,3 +1,6 @@
+# Set PG_CONFIG properly
+PG_CONFIG ?= pg_config
+
 EXTENSION    = $(shell grep -m 1 '"name":' META.json | \
                sed -e 's/[[:space:]]*"name":[[:space:]]*"\([^"]*\)",/\1/')
 EXTVERSION   = $(shell grep -m 1 '[[:space:]]\"version":' META.json | \
@@ -17,7 +20,7 @@ PG91         = $(shell $(PG_CONFIG) --version | grep -qE " 8\.| 9\.0" && echo no
 DATA = $(wildcard sql/*--*.sql)
 EXTRA_CLEAN = sql/$(EXTENSION)--$(EXTVERSION).sql
 
-PGXS := $(shell pg_config --pgxs)
+PGXS := $(shell $(PG_CONFIG) --pgxs)
 include $(PGXS)
 
 all: sql/$(EXTENSION)--$(EXTVERSION).sql
@@ -25,7 +28,7 @@ all: sql/$(EXTENSION)--$(EXTVERSION).sql
 sql/$(EXTENSION)--$(EXTVERSION).sql: sql/$(EXTENSION).sql
 	cp $< $@
 
-pkglibdir = $(shell pg_config --pkglibdir)
+pkglibdir = $(shell $(PG_CONFIG) --pkglibdir)
 
 
 
