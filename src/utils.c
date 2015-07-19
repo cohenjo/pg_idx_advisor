@@ -268,11 +268,13 @@ Configuration* parse_config_file(const char *filename, const char *cols, const b
 	 ReleaseSysCache(ht_opc);
  }
 
-List* create_operator_list(char *SupportedOps[]) 
+List* create_operator_list(char *SupportedOps[], int numOps) 
 {
 	List*       opnos = NIL;
         int i;
-	for( i=0; i < lengthof(SupportedOps); ++i )
+
+        elog(DEBUG2, "IDX_ADV: create_operator_list: we have %d ops to scan.",lengthof(SupportedOps));
+	for( i=0; i < numOps; i++ )
 	{
 		FuncCandidateList   opnosResult;
 
@@ -289,7 +291,7 @@ List* create_operator_list(char *SupportedOps[])
 			opnosResult != NULL;
 			opnosResult = lnext(opnosResult) )
 		{
-			//elog(DEBUG2, "opno: %d, %s",opnosResult->oid ,SupportedOps[i]);
+			elog(DEBUG2, "opno: %d, %s",opnosResult->oid ,SupportedOps[i]);
 			opnos = lappend_oid( opnos, opnosResult->oid );
 		}
 

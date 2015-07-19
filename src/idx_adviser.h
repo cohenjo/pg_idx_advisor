@@ -27,22 +27,22 @@ typedef struct {
 	Index		varno;					/**< index into the rangetable */
 	Index		varlevelsup;			/**< points to the correct rangetable */
 	int8		ncols;					/**< number of indexed columns */
-	Oid		    vartype[INDEX_MAX_KEYS];/**< type of the column(s) */
+	Oid		vartype[INDEX_MAX_KEYS];/**< type of the column(s) */
 	AttrNumber	varattno[INDEX_MAX_KEYS];/**< attribute number of the column(s) */
-	char*       varname[INDEX_MAX_KEYS];/**< attribute name */
-	Oid			op_class[INDEX_MAX_KEYS];			/* the field op class family */
-	Oid			collationObjectId[INDEX_MAX_KEYS];	/* the field collation */
+	char*       	varname[INDEX_MAX_KEYS];/**< attribute name */
+	Oid		op_class[INDEX_MAX_KEYS];			/* the field op class family */
+	Oid		collationObjectId[INDEX_MAX_KEYS];	/* the field collation */
 	List *		attList;				/**< list of IndexElem's - describe each parameter */
-	Oid		    reloid;					/**< the table oid */
-	char*       erefAlias;              /**< hold rte->eref->aliasname */
-	Oid			idxoid;				    /**< the virtual index oid */
+	Oid		reloid;					/**< the table oid */
+	char*       	erefAlias;              /**< hold rte->eref->aliasname */
+	Oid		idxoid;				    /**< the virtual index oid */
 	BlockNumber	pages;					/**< the estimated size of index */
 	double		tuples;					/**< number of index tuples in index */
 	bool		idxused;				/**< was this used by the planner? */
 	float4		benefit;				/**< benefit made by using this cand */
 	bool		inh;					/**< does the RTE allow inheritance */
-	Oid		    parentOid;				/**< the parent table oid */
-
+	Oid	 	parentOid;				/**< the parent table oid */
+	Oid		amOid;
 } IndexCandidate;
 
 /*!
@@ -55,15 +55,20 @@ typedef struct {
 } RelClause;
 
 typedef struct {
-
     List*   predicate;                  /**< the predicates used for the partial indexs */
-    List*	candidates;                 /**< list of candidates init to NIL; */
+    List*   candidates;                 /**< list of candidates init to NIL; */
 } QueryContext;
+
+typedef struct {
+    List*   opnos;                  /**< list of supported b-tree operations */
+    List*   ginopnos;                 /**< list of supported gin operations */
+    List*   gistopnos;                 /**< list of supported gist operations */
+} OpnosContext;
 
 typedef struct
 {
 	List* candidates;
-	List* opnos;
+	OpnosContext* context;
 	List* rangeTableStack;
 } ScanContext;
 

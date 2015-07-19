@@ -72,20 +72,20 @@ PG_MODULE_MAGIC;
 
 static bool index_candidates_walker (Node *root, ScanContext *context);
 static List* scan_query(	const Query* const query,
-				List* const opnos,
+				OpnosContext* context,
 				List* rangeTableStack );
 
 static List* scan_generic_node(	const Node* const root,
-				List* const opnos,
+				OpnosContext *context,
 				List* const rangeTableStack );
 
 static List* scan_group_clause(	List* const groupList,
 				List* const targtList,
-				List* const opnos,
+				OpnosContext* context,
 				List* const rangeTblStack );
 
 static List* scan_targetList(   List* const targetList,
-                                List* const opnos,
+                                OpnosContext* context,
                                 List* const rangeTableStack );
 
 
@@ -309,10 +309,8 @@ static PlannedStmt* index_adviser(	Query*			queryCopy,
 	bool		saveCandidates = false;
 	int			i;
 	ListCell	*cell;
-	List*       opnos = NIL;			  /* contains all valid operator-ids */
-	List*       ginopnos = NIL;			  /* contains all valid gin-operator-ids */
-	List*       gistopnos = NIL;			  /* contains all valid gist-operator-ids */
-	List*		candidates = NIL;				  /* the resulting candidates */
+	List*		candidates = NIL;	/* the resulting candidates */
+        OpnosContext *context;			/* contains all valid operator-ids */
 
 	Cost		actualStartupCost;
 	Cost		actualTotalCost;
@@ -320,7 +318,7 @@ static PlannedStmt* index_adviser(	Query*			queryCopy,
 	Cost		newTotalCost;
 	Cost		startupCostSaved;
 	Cost		totalCostSaved;
-	float4		startupGainPerc;							/* in percentages */
+	float4		startupGainPerc;	/* in percentages */
 	float4		totalGainPerc;
 
 	ResourceOwner	oldResourceOwner;
@@ -358,43 +356,23 @@ static PlannedStmt* index_adviser(	Query*			queryCopy,
 	elog( DEBUG2 , "IND ADV: actual plan costs: %lf .. %lf",actualStartupCost,actualTotalCost);
 
 	/* create list containing all operators supported by the index advisor */
-	// for( i=0; i < lengthof(SupportedOps); ++i )
-	// {
-		// FuncCandidateList   opnosResult;
-
-		// List* supop = list_make1( makeString( SupportedOps[i] ) );
-
-		// /*
-		 // * collect operator ids into an array.
-		 // */
-		// for(	opnosResult = OpernameGetCandidates( supop, '\0'
-// #if PG_VERSION_NUM >= 90400
-                                                           // , true
-// #endif
-                                                           // );
-				// opnosResult != NULL;
-				// opnosResult = lnext(opnosResult) )
-		// {
-			// elog(DEBUG2, "opno: %d, %s",opnosResult->oid ,SupportedOps[i]);
-			// opnos = lappend_oid( opnos, opnosResult->oid );
-		// }
-
-		// /* free the Value* (T_String) and the list */
-		// pfree( linitial( supop ) );
-		// list_free( supop );
-	// }
-	opnos = create_operator_list(SupportedOps) ;
-	ginopnos = create_operator_list(SupportedGinOps) ;
-	gistopnos = create_operator_list(SupportedGistOps) ;
+        context = (OpnosContext*)palloc(sizeof(OpnosContext));
+        context->opnos = NIL;    
+        context->ginopnos = NIL; 
+        context->gistopnos = NIL;
+	context->opnos = create_operator_list(SupportedOps, lengthof(SupportedOps)) ;
+	context->ginopnos = create_operator_list(SupportedGinOps, lengthof(SupportedGinOps)) ;
+	context->gistopnos = create_operator_list(SupportedGistOps, lengthof(SupportedGistOps)) ;
 
 	elog( DEBUG3, "IND ADV: Generate index candidates" );
 	/* Generate index candidates */
-	candidates = scan_query( queryCopy, opnos, NULL );
+	candidates = scan_query( queryCopy, context, NULL );
 
 	/* the list of operator oids isn't needed anymore */
-	list_free( opnos );
-	list_free( ginopnos );
-	list_free( gistopnos );
+	list_free( context->opnos );
+	list_free( context->ginopnos );
+	list_free( context->gistopnos );
+        pfree(context);
 
 	if (list_length(candidates) == 0)
 		goto DoneCleanly;
@@ -896,6 +874,26 @@ static void get_relation_info_callback(	PlannerInfo	*root,
 		{
 			elog( DEBUG4 ,"IND ADV: need to figure out the right valuse for amcostestimate");
 			info->amcostestimate=(RegProcedure)1268; //btcostestimate
+                        // TODO: consider using: (*indexRelation->rd_am)->amcostestimate
+                        switch (info->relam)
+			{
+				case BTREE_AM_OID:
+					info->amcostestimate=(RegProcedure)1268; //btcostestimate
+					break;
+				case GIN_AM_OID:
+					info->amcostestimate=(RegProcedure)772; //gistcostestimate
+					//info->amcostestimate=(RegProcedure)2741; //gincostestimate
+					//TODO: ginGetStats (called by gistcostestimate) fails as it reads the index directly - find workaround.
+					break;
+				case GIST_AM_OID:
+					info->amcostestimate=(RegProcedure)772; //gistcostestimate
+					break;
+#if PG_VERSION_NUM >= 90500
+				case BRIN_AM_OID:
+					info->amcostestimate=(RegProcedure)3800; //brincostestimate
+					break;
+#endif
+			}
 		}
 #if PG_VERSION_NUM < 90500
 		info->canreturn = index_can_return(indexRelation);
@@ -1287,6 +1285,7 @@ static void store_idx_advice( List* candidates , ExplainState * 	es )
 			}
 		}
 		//elog( DEBUG2 , "IND ADV: store_idx_advice: const exsits %s",pg_get_indexdef_columns(idxcd->idxoid,2));
+		elog( DEBUG2 , "IDX_ADV: store_idx_advice: idx am %d",idxcd->amOid); 
 
 		//appendStringInfo(&attList,TextDatumGetCString(DirectFunctionCall2(pg_get_expr,CStringGetTextDatum(nodeToString(make_ands_explicit(idxcd->attList))), ObjectIdGetDatum(idxcd->reloid))));
 		//elog( DEBUG2 , "IND ADV: store_idx_advice - idxcd->attList: %s",TextDatumGetCString(DirectFunctionCall2(pg_get_expr,CStringGetTextDatum(nodeToString(make_ands_explicit(idxcd->attList))), ObjectIdGetDatum(idxcd->reloid))));
@@ -1307,7 +1306,26 @@ static void store_idx_advice( List* candidates , ExplainState * 	es )
 			elog( DEBUG3 , "IND ADV: store_idx_advice: no where clause");
 		}
 
-		appendStringInfo( &indexDef,"create index on %s(%s)%s%s",get_rel_name(idxcd->reloid),attList.data,partialClause.len>0?" where":"",partialClause.len>0?partialClause.data:"");
+		//appendStringInfo( &indexDef,"create index on %s(%s)%s%s",get_rel_name(idxcd->reloid),attList.data,partialClause.len>0?" where":"",partialClause.len>0?partialClause.data:"");
+		appendStringInfo( &indexDef,"create index on %s",get_rel_name(idxcd->reloid));
+		switch (idxcd->amOid)
+                {
+                	case BTREE_AM_OID:
+                                        break;
+                        case GIN_AM_OID:
+				appendStringInfo( &indexDef," USING GIN");
+                                        break;
+                        case GIST_AM_OID:
+				appendStringInfo( &indexDef," USING GIST");
+                                        break;
+#if PG_VERSION_NUM >= 90500
+                        case BRIN_AM_OID:
+				appendStringInfo( &indexDef," USING BRIN");
+                        	break;
+#endif
+                }
+		appendStringInfo( &indexDef,"(%s)%s%s",attList.data,partialClause.len>0?" where":"",partialClause.len>0?partialClause.data:"");
+
 
 		/* FIXME: Mention the column names explicitly after the table name. */
 		appendStringInfo( &query, "insert into %s.\""IDX_ADV_TABL"\" values ( %d, array[%s], %f, %d, %d, now(),array[%s],array[%s],array[%s],$$%s$$,$$%s$$,$$%s$$,$$%s$$);",
@@ -1883,8 +1901,8 @@ static void mark_used_candidates(const Node* const node, List* const candidates)
  * GROUP BY, ORDER BY, and we also add aditional handeling of inheritence table expension.
  */
 static List* scan_query(	const Query* const query,
-					List* const opnos,
-					List* rangeTableStack )
+				OpnosContext* context,
+				List* rangeTableStack )
 {
 	const ListCell*	cell;
 	List*		candidates		= NIL;
@@ -1908,7 +1926,7 @@ static List* scan_query(	const Query* const query,
 			elog_node_display( DEBUG4 , "CTE query", rte->ctequery,true);
 			candidates = merge_candidates( candidates, scan_query(
 										rte->ctequery,
-										opnos,
+										context,
 										rangeTableStack));
 		}
 	}
@@ -1925,7 +1943,7 @@ static List* scan_query(	const Query* const query,
 			elog_node_display( DEBUG4 , "sub query", rte->subquery,true);
 			candidates = merge_candidates( candidates, scan_query(
 										rte->subquery,
-										opnos,
+										context,
 										rangeTableStack));
 		}
 
@@ -1936,15 +1954,15 @@ static List* scan_query(	const Query* const query,
 			//elog( DEBUG3 , "IND ADV: scan_query: join type : %d",rte->jointype);
 			//elog_node_display( DEBUG4 , "sub query", rte->joinaliasvars,true);
 			candidates = merge_candidates( candidates, scan_generic_node( rte->joinaliasvars,
-							opnos,
-							rangeTableStack));
+											context,
+											rangeTableStack));
 		}
 	}
 
 	/* scan "where" from the current query */
 	if( query->jointree->quals != NULL )
 	{
-		newCandidates = scan_generic_node(	query->jointree->quals, opnos,
+		newCandidates = scan_generic_node(	query->jointree->quals, context,
 							rangeTableStack );
 	}
 
@@ -1958,7 +1976,7 @@ static List* scan_query(	const Query* const query,
 	{
 		newCandidates = scan_group_clause(	query->groupClause,
 							query->targetList,
-							opnos,
+							context,
 							rangeTableStack );
 	}
 
@@ -1967,14 +1985,14 @@ static List* scan_query(	const Query* const query,
 	{
 		newCandidates = scan_group_clause(	query->sortClause,
 							query->targetList,
-							opnos,
+							context,
 							rangeTableStack );
 	}
 	/* if no indexcadidate found until now, scan the target list "select" */
 	if( ( newCandidates == NIL ) && ( query->targetList != NULL ) )
 	{
 		newCandidates = scan_targetList(	query->targetList,
-							opnos,
+							context,
 							rangeTableStack );
 	}
 
@@ -1999,7 +2017,7 @@ static List* scan_query(	const Query* const query,
  */
 static List* scan_group_clause(	List* const groupList,
 			List* const targetList,
-			List* const opnos,
+			OpnosContext* context,
 			List* const rangeTableStack )
 {
 	const ListCell*	cell;
@@ -2021,7 +2039,7 @@ static List* scan_group_clause(	List* const groupList,
 		const Node* const node = (const Node*)targetElm->expr;
 
 		candidates = merge_candidates( candidates, scan_generic_node( node,
-							opnos,
+							context,
 							rangeTableStack));
 	}
 
@@ -2036,7 +2054,7 @@ static List* scan_group_clause(	List* const groupList,
  *    Runs thru the GROUP BY clause looking for columns to create index candidates.
  */
 static List* scan_targetList(	List* const targetList,
-				List* const opnos,
+				OpnosContext* context,
 				List* const rangeTableStack )
 {
 	const ListCell*	cell;
@@ -2054,7 +2072,7 @@ static List* scan_targetList(	List* const targetList,
 		const Node* const node = (const Node*)targetElm->expr;
 
 		candidates = merge_candidates(  candidates, scan_generic_node( node,
-						opnos,
+						context,
 						rangeTableStack));
 	}
 
@@ -2094,8 +2112,8 @@ static bool index_candidates_walker (Node *root, ScanContext *context)
 				{
 					const Node* const node = (const Node*)lfirst( cell );
 					context->candidates = merge_candidates( context->candidates,
-											scan_generic_node( node, context->opnos,
-															context->rangeTableStack));
+											scan_generic_node( node, context->context,
+														context->rangeTableStack));
 				}
 			}
 			else
@@ -2109,11 +2127,11 @@ static bool index_candidates_walker (Node *root, ScanContext *context)
 					List	*icList; /* Index candidate list */
 					List	*cicList; /* Composite index candidate list */
 
-					icList	= scan_generic_node( node, context->opnos, context->rangeTableStack );
+					icList	= scan_generic_node( node, context->context, context->rangeTableStack );
 					cicList = build_composite_candidates(candidates, icList);
 					context->candidates = merge_candidates(context->candidates, icList);
 					compositeCandidates = merge_candidates(compositeCandidates,
-															cicList);
+										cicList);
 				}
 
 				/* now append the composite (multi-col) indexes to the list */
@@ -2130,29 +2148,28 @@ static bool index_candidates_walker (Node *root, ScanContext *context)
 			const OpExpr* const expr = (const OpExpr*)root;
 			elog( DEBUG3 , "IND ADV: OpExpr: opno:%d, location:%d",expr->opno,expr->location);
 
-			if( list_member_oid( context->opnos, expr->opno ) )
+			if( list_member_oid( context->context->opnos, expr->opno ) || list_member_oid( context->context->ginopnos, expr->opno) )
 			{
 				bool foundToken = false;
+				/* this part extracts the expr to be used as the predicate for the partial index */
+				elog( DEBUG3 , "IND ADV: OpExpr: check context");
 
-	            /* this part extracts the expr to be used as the predicate for the partial index */
-			    elog( DEBUG3 , "IND ADV: OpExpr: check context");
+		                foreach( cell, expr->args )
+		                {
+					const Node* const node = (const Node*)lfirst( cell );
 
-                foreach( cell, expr->args )
-                {
-                    const Node* const node = (const Node*)lfirst( cell );
-
-                    elog( DEBUG4 , "IND ADV: OpExpr: check var %d",nodeTag(node));
-                    if(nodeTag(node)==T_Var){
-                        const Var* const e = (const Var*)(node);
-                        List* rt = list_nth( context->rangeTableStack, e->varlevelsup );
-                        const RangeTblEntry* rte = list_nth( rt, e->varno - 1 );
+ 		 			elog( DEBUG4 , "IND ADV: OpExpr: check var %d",nodeTag(node));
+                    			if(nodeTag(node)==T_Var){
+			                        const Var* const e = (const Var*)(node);
+			                        List* rt = list_nth( context->rangeTableStack, e->varlevelsup );
+			                        const RangeTblEntry* rte = list_nth( rt, e->varno - 1 );
 						if (rte->rtekind == RTE_CTE) break; // break if working on CTE.
-                        RelClause* rc = NULL;
+                        			RelClause* rc = NULL;
 						char *token = NULL;
 
-                        elog( DEBUG3 , "IND ADV: OpExpr: working on: %s",rte->eref->aliasname);
-                        char *varname = get_relid_attribute_name(rte->relid, e->varattno);
-                        elog( DEBUG3 , "IND ADV: OpExpr: working on: %d",rte->relid);
+			                        elog( DEBUG3 , "IND ADV: OpExpr: working on: %s",rte->eref->aliasname);
+			                        char *varname = get_relid_attribute_name(rte->relid, e->varattno);
+			                        elog( DEBUG3 , "IND ADV: OpExpr: working on: %d",rte->relid);
 						char *token_str = strdup(idxadv_columns);
 
 						elog( DEBUG1 , "IND ADV: OpExpr: check right var, %s, cols: %s",varname,idxadv_columns);
@@ -2164,11 +2181,11 @@ static bool index_candidates_walker (Node *root, ScanContext *context)
 							elog( DEBUG4 , "IND ADV: token %s",token);
 						}
 
-                        if (foundToken)
-                        {
-                            ListCell* relPredicates = get_rel_clausesCell(table_clauses, rte->relid,rte->eref->aliasname);
-                            elog( INFO , "IND ADV: create the clause for: %s",rte->eref->aliasname);
-                            if (relPredicates == NULL){
+                        			if (foundToken)
+			                        {
+			                            ListCell* relPredicates = get_rel_clausesCell(table_clauses, rte->relid,rte->eref->aliasname);
+			                            elog( INFO , "IND ADV: create the clause for: %s",rte->eref->aliasname);
+			                            if (relPredicates == NULL){
                                 Node* f = linitial(expr->args);
                                 Node* s = lsecond(expr->args);
                                 elog( DEBUG4 , "index candidate - create a new entry for the relation");
@@ -2214,8 +2231,8 @@ static bool index_candidates_walker (Node *root, ScanContext *context)
 						const Node* const node = (const Node*)lfirst( cell );
 
 						context->candidates = merge_candidates( context->candidates,
-												scan_generic_node( node, context->opnos,
-																context->rangeTableStack));
+											scan_generic_node( node, context->context,
+													   context->rangeTableStack));
 
 					}
 				}
@@ -2251,8 +2268,8 @@ static bool index_candidates_walker (Node *root, ScanContext *context)
 				{
 					/* create index-candidate and build a new list */
 					int				i;
-					IndexCandidate	*cand = (IndexCandidate*)palloc0(
-														sizeof(IndexCandidate));
+					TYPCATEGORY tcategory ;
+					IndexCandidate	*cand = (IndexCandidate*)palloc0(sizeof(IndexCandidate));
 
 					elog( DEBUG3 , "index candidate - in here");
 
@@ -2266,10 +2283,13 @@ static bool index_candidates_walker (Node *root, ScanContext *context)
 					cand->vartype[ 0 ]  = expr->vartype;
 					cand->varattno[ 0 ] = expr->varattno;
 					cand->varname[ 0 ]   = get_relid_attribute_name(rte->relid, expr->varattno);
-                    elog( DEBUG3 , "index candidate - rel: %s, var: %s",cand->erefAlias,cand->varname[ 0 ]);
+					elog( DEBUG3 , "index candidate - rel: %s, var: %s",cand->erefAlias,cand->varname[ 0 ]);
 					/*FIXME: Do we really need this loop? palloc0 and ncols,
 					 * above, should have taken care of this!
 					 */
+					tcategory = TypeCategory(expr->vartype);
+					cand->amOid = ((tcategory == TYPCATEGORY_ARRAY)||(tcategory == TYPCATEGORY_USER)) ? GIN_AM_OID : BTREE_AM_OID ;
+					elog( DEBUG3 , "index candidate - am: %d, category: %c",cand->amOid,tcategory);
 					for( i = 1; i < INDEX_MAX_KEYS; ++i )
 						cand->varattno[i] = 0;
 
@@ -2287,7 +2307,7 @@ static bool index_candidates_walker (Node *root, ScanContext *context)
 		{
 			const Query* const query = (const Query*)root;
 
-			context->candidates = scan_query( query, context->opnos, context->rangeTableStack );
+			context->candidates = scan_query( query, context->context, context->rangeTableStack );
 			return false;
 		}
 		break;
@@ -2462,12 +2482,12 @@ static bool index_candidates_walker (Node *root, ScanContext *context)
 * \brief this scanner uses the tree walker to drill down into the query tree to find Indexing candidates.
 */
 static List* scan_generic_node(	const Node* const root,
-							List* const opnos,
-							List* const rangeTableStack )
+				OpnosContext* opnos_context,
+				List* const rangeTableStack )
 {
 	ScanContext context;
         context.candidates = NIL;
-	context.opnos = opnos;
+	context.context = opnos_context;
 	context.rangeTableStack = rangeTableStack;
 	elog( DEBUG4, "IND ADV: scan_generic_node: before tree walk" );
 	query_or_expression_tree_walker(root,
@@ -2488,7 +2508,7 @@ static List* scan_generic_node(	const Node* const root,
  * \TODO extend to support functional indexes
  */
 static int compare_candidates( const IndexCandidate* ic1,
-				   const IndexCandidate* ic2 )
+			       const IndexCandidate* ic2 )
 {
 	int result = (signed int)ic1->reloid - (signed int)ic2->reloid;
 	elog( DEBUG3, "IND ADV: compare_candidates: ENTER" );
@@ -2747,11 +2767,11 @@ static List* expand_inherited_candidates(List* list)
 			IndexCandidate* cic = (IndexCandidate*)palloc(sizeof(IndexCandidate));
 			//Relation base_rel = heap_open( childOID, AccessShareLock );
 			/* init some members of composite candidate 1 */
-			cic->varno			= -1;
+			cic->varno		= -1;
 			cic->varlevelsup	= -1;
-			cic->ncols			= cand->ncols;
-			cic->reloid			= childOID;
-			cic->erefAlias      = pstrdup(cand->erefAlias);
+			cic->ncols		= cand->ncols;
+			cic->reloid		= childOID;
+			cic->erefAlias 		= pstrdup(cand->erefAlias);
 			cic->idxused		= false;
 			cic->parentOid		= cand->reloid;
 
@@ -2759,9 +2779,9 @@ static List* expand_inherited_candidates(List* list)
 			/* copy attributes of the candidate to the inherited candidate 	*/
 			for( i = 0; i < cand->ncols; ++i)
 			{
-				cic->vartype[ i ]	= cand->vartype[ i ];
+				cic->vartype[ i ]  = cand->vartype[ i ];
 				cic->varattno[ i ] = cand->varattno[ i ];
-				cic->varname[ i ] = cand->varname[ i ];
+				cic->varname[ i ]  = cand->varname[ i ];
 			}
 
 			/* set remaining attributes to null */
@@ -2773,6 +2793,7 @@ static List* expand_inherited_candidates(List* list)
 
 			/* cope index experessions for the new composite indexes */
 			cic->attList = list_copy(cand->attList);
+			cic->amOid   = cand->amOid;
 			elog(DEBUG3,"expand_inherited_candidates: start att copy,attlist cic: %d ",list_length(cic->attList));
 			newCandidates = lappend(newCandidates, cic);
 
@@ -3137,7 +3158,7 @@ static List* create_virtual_indexes( List* candidates )
 			elog( DEBUG4, "IND ADV: create_virtual_indexes: prepare op_class[] vartype: %d", cand->vartype[ i ]);
 			/* prepare op_class[] */
 			collationObjectId[i] = 0;
-			op_class[i] = GetDefaultOpClass( cand->vartype[ i ], BTREE_AM_OID );
+			op_class[i] = GetDefaultOpClass( cand->vartype[ i ], cand->amOid );
 			/* Replace text_ops with text_pattern_ops */
 			if (op_class[i]==3126){
 				idxadv_text_pattern_ops?op_class[i] = 10049:NULL;
@@ -3181,17 +3202,17 @@ static List* create_virtual_indexes( List* candidates )
 		/* create the index without data */
 		cand->idxoid = index_create( relation
 					, idx_name
-					,InvalidOid
+					, InvalidOid
 					, InvalidOid
 					, indexInfo
-					,colNames
-					, BTREE_AM_OID
-					,InvalidOid
+					, colNames
+					, cand->amOid //, BTREE_AM_OID
+					, InvalidOid
 					, collationObjectId
-					,op_class
+					, op_class
 					, NULL
 					, (Datum)0 //reloptions
-					,false //isprimary
+					, false //isprimary
 					, false //isconstraint
 					, false // deferrable
 					, false //initdeferred
@@ -3443,10 +3464,10 @@ static List *build_index_tlist(PlannerInfo *root, IndexOptInfo *index, Relation 
                                 elog(ERROR, "wrong number of index expressions - expressions column not defined properly");
                         indexvar = (Expr *) lfirst(indexpr_item);
                         indexpr_item = lnext(indexpr_item);
-						elog(DEBUG4, "build_index_tlist: in loop advance  indexpr_item");
-						if (indexpr_item != NULL){
-							elog(DEBUG4, "   more to advance...");
-						}
+			elog(DEBUG4, "build_index_tlist: in loop advance  indexpr_item");
+			if (indexpr_item != NULL){
+				elog(DEBUG4, "   more to advance...");
+			}
 
                 }
 
@@ -3458,8 +3479,7 @@ static List *build_index_tlist(PlannerInfo *root, IndexOptInfo *index, Relation 
         }
         if (indexpr_item != NULL){
             elog(ERROR, "wrong number of index expressions - ncols not setup properly");
-
-		}
+	}
 
         return tlist;
 }
