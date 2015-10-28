@@ -1,128 +1,41 @@
-postgres=# set client_min_messages to log;
-SET
-postgres=#
-postgres=# load '$libdir/plugins/pg_idx_advisor.so';
+-- set client_min_messages to log;
+create extension pg_idx_advisor;
+load 'pg_idx_advisor.so';
 NOTICE:  IND ADV: plugin loaded
-LOAD
-postgres=#
-postgres=#
-postgres=# drop table if exists t, t1;
-DROP TABLE
-postgres=# create table t( a int, b int );
-CREATE TABLE
-postgres=# create table t1( a int, b int );
-CREATE TABLE
-postgres=#
-postgres=#
-postgres=# explain select * from t where a = 100;
-INFO:
-** Plan with original indexes **
+\o /tmp/pg_idx_tst.out
+drop table if exists t, t1;
+NOTICE:  table "t" does not exist, skipping
+NOTICE:  table "t1" does not exist, skipping
+create table t( a int, b int );
+create table t1( a int, b int );
+explain select * from t where a = 100;
+INFO:  
+** Plan with Original indexes **
 
-                                   QUERY PLAN
---------------------------------------------------------------------------------
- Seq Scan on t  (cost=0.00..36.75 rows=11 width=8)
-   Filter: (a = 100)
+explain select * from t where b = 100;
+INFO:  
+** Plan with Original indexes **
 
- ** Plan with hypothetical indexes **
- read only, advice, index: create index on t(a)
- Bitmap Heap Scan on t  (cost=4.12..14.79 rows=11 width=8)
-   Recheck Cond: (a = 100)
-   ->  Bitmap Index Scan on <V-Index>:114699  (cost=0.00..4.11 rows=11 width=0)
-         Index Cond: (a = 100)
-(9 rows)
+explain select * from t where a = 100 and b = 100;
+INFO:  
+** Plan with Original indexes **
 
-postgres=#
-postgres=# explain select * from t where b = 100;
-INFO:
-** Plan with original indexes **
+explain select * from t where a = 100 or b = 100;
+INFO:  
+** Plan with Original indexes **
 
-                                   QUERY PLAN
---------------------------------------------------------------------------------
- Seq Scan on t  (cost=0.00..36.75 rows=11 width=8)
-   Filter: (b = 100)
+-- /* let's do some sensible join over these two tables */;
+-- explain select * from t, t1 where t.a = 100 and t1.a = 100 and t1.b = 100;
+-- explain with acte as (select * from t where a = 200) select * from acte;
+\o
+select attrs,benefit,indclass,indoption,query,recommendation from index_advisory;
+ attrs | benefit | indclass | indoption |                   query                    |    recommendation    
+-------+---------+----------+-----------+--------------------------------------------+----------------------
+ {1}   | 21.9635 | {1978}   | {1978}    | select * from t where a = 100;             | create index on t(a)
+ {2}   | 21.9635 | {1978}   | {1978}    | select * from t where b = 100;             | create index on t(b)
+ {1}   | 14.8048 | {1978}   | {1978}    | select * from t where a = 100 and b = 100; | create index on t(a)
+ {2}   | 14.8048 | {1978}   | {1978}    | select * from t where a = 100 and b = 100; | create index on t(b)
+ {1}   | 11.7747 | {1978}   | {1978}    | select * from t where a = 100 or b = 100;  | create index on t(a)
+ {2}   | 11.7747 | {1978}   | {1978}    | select * from t where a = 100 or b = 100;  | create index on t(b)
+(6 rows)
 
- ** Plan with hypothetical indexes **
- read only, advice, index: create index on t(b)
- Bitmap Heap Scan on t  (cost=4.12..14.79 rows=11 width=8)
-   Recheck Cond: (b = 100)
-   ->  Bitmap Index Scan on <V-Index>:114700  (cost=0.00..4.11 rows=11 width=0)
-         Index Cond: (b = 100)
-(9 rows)
-
-postgres=#
-postgres=# explain select * from t where a = 100 and b = 100;
-INFO:
-** Plan with original indexes **
-
-                                      QUERY PLAN
---------------------------------------------------------------------------------------
- Seq Scan on t  (cost=0.00..42.10 rows=1 width=8)
-   Filter: ((a = 100) AND (b = 100))
-
- ** Plan with hypothetical indexes **
- read only, advice, index: create index on t(a)
- read only, advice, index: create index on t(b)
- Bitmap Heap Scan on t  (cost=8.48..12.49 rows=1 width=8)
-   Recheck Cond: ((b = 100) AND (a = 100))
-   ->  BitmapAnd  (cost=8.48..8.48 rows=1 width=0)
-         ->  Bitmap Index Scan on <V-Index>:114702  (cost=0.00..4.11 rows=11 width=0)
-               Index Cond: (b = 100)
-         ->  Bitmap Index Scan on <V-Index>:114701  (cost=0.00..4.11 rows=11 width=0)
-               Index Cond: (a = 100)
-(13 rows)
-
-postgres=#
-postgres=# -- explain select * from t where a = 100 or b = 100; -- BUG: Fix 'OR' issue.
-postgres=#
-postgres=# /* let's do some sensible join over these two tables */;
-postgres=# explain select * from t, t1 where t.a = 100 and t1.a = 100 and t1.b = 100;
-INFO:
-** Plan with original indexes **
-
-                                         QUERY PLAN
---------------------------------------------------------------------------------------------
- Nested Loop  (cost=0.00..78.96 rows=11 width=16)
-   ->  Seq Scan on t1  (cost=0.00..42.10 rows=1 width=8)
-         Filter: ((a = 100) AND (b = 100))
-   ->  Seq Scan on t  (cost=0.00..36.75 rows=11 width=8)
-         Filter: (a = 100)
-
- ** Plan with hypothetical indexes **
- read only, advice, index: create index on t(a)
- read only, advice, index: create index on t1(a)
- read only, advice, index: create index on t1(b)
- Nested Loop  (cost=12.59..27.39 rows=11 width=16)
-   ->  Bitmap Heap Scan on t1  (cost=8.48..12.49 rows=1 width=8)
-         Recheck Cond: ((b = 100) AND (a = 100))
-         ->  BitmapAnd  (cost=8.48..8.48 rows=1 width=0)
-               ->  Bitmap Index Scan on <V-Index>:114705  (cost=0.00..4.11 rows=11 width=0)
-                     Index Cond: (b = 100)
-               ->  Bitmap Index Scan on <V-Index>:114704  (cost=0.00..4.11 rows=11 width=0)
-                     Index Cond: (a = 100)
-   ->  Bitmap Heap Scan on t  (cost=4.12..14.79 rows=11 width=8)
-         Recheck Cond: (a = 100)
-         ->  Bitmap Index Scan on <V-Index>:114703  (cost=0.00..4.11 rows=11 width=0)
-               Index Cond: (a = 100)
-(22 rows)
-
-postgres=#
-postgres=# select * from index_advisory;
- reloid | attrs | benefit | index_size | backend_pid |           timestamp           | indcollation | indclass | indoption | indexprs | indpred |                               query                                |    recommendation
-
---------+-------+---------+------------+-------------+-------------------------------+--------------+----------+-----------+----------+---------+--------------------------------------------------------------------+--------------------
----
- 114693 | {1}   | 21.9635 |          8 |       16193 | 2015-05-28 07:41:20.923228-04 | {0}          | {1978}   | {1978}    | <>       | <>      | select * from t where a = 100;                                     | create index on t(a
-)
- 114693 | {2}   | 21.9635 |          8 |       16193 | 2015-05-28 07:41:20.953225-04 | {0}          | {1978}   | {1978}    | <>       | <>      | select * from t where b = 100;                                     | create index on t(b
-)
- 114693 | {1}   | 14.8048 |          8 |       16193 | 2015-05-28 07:41:20.971208-04 | {0}          | {1978}   | {1978}    | <>       | <>      | select * from t where a = 100 and b = 100;                         | create index on t(a
-)
- 114693 | {2}   | 14.8048 |          8 |       16193 | 2015-05-28 07:41:20.971208-04 | {0}          | {1978}   | {1978}    | <>       | <>      | select * from t where a = 100 and b = 100;                         | create index on t(b
-)
- 114693 | {1}   |  17.191 |          8 |       16193 | 2015-05-28 07:41:21.010266-04 | {0}          | {1978}   | {1978}    | <>       | <>      | select * from t, t1 where t.a = 100 and t1.a = 100 and t1.b = 100; | create index on t(a
-)
- 114696 | {1}   |  17.191 |          8 |       16193 | 2015-05-28 07:41:21.010266-04 | {0}          | {1978}   | {1978}    | <>       | <>      | select * from t, t1 where t.a = 100 and t1.a = 100 and t1.b = 100; | create index on t1(
-a)
- 114696 | {2}   |  17.191 |          8 |       16193 | 2015-05-28 07:41:21.010266-04 | {0}          | {1978}   | {1978}    | <>       | <>      | select * from t, t1 where t.a = 100 and t1.a = 100 and t1.b = 100; | create index on t1(
-b)
-(7 rows)

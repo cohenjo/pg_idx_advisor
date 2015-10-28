@@ -39,8 +39,9 @@ create index idx_measurement_unitsales_y2006m02 ON measurement_y2006m02 (unitsal
 
 -- now load the advisor
 load 'pg_idx_advisor.so';
-
+\o /tmp/pg_idx_tst.out
 -- we should get advices on both parent and cheild tables
 explain select max(unitsales) from measurement;
-
+\o
+select attrs,benefit,indclass,indoption,query,recommendation from index_advisory;
 
