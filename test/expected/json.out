@@ -1,0 +1,23 @@
+CREATE TABLE webapp (doc JSONB);
+INSERT INTO webapp VALUES('{"name" : "Bill", "active" : true}'), ('{"name" : "Jack", "active" : true}');
+insert into webapp select row_to_json(foo) from (select 'jack_'||i as name, (i%5 = 0) as active from generate_series(1,2000) i)foo;
+ERROR:  column "doc" is of type jsonb but expression is of type json
+LINE 1: insert into webapp select row_to_json(foo) from (select 'jac...
+                                  ^
+HINT:  You will need to rewrite or cast the expression.
+SELECT ctid, * FROM webapp ORDER BY 1;
+ ctid  |               doc                
+-------+----------------------------------
+ (0,1) | {"name": "Bill", "active": true}
+ (0,2) | {"name": "Jack", "active": true}
+(2 rows)
+
+CREATE INDEX i_webapp_yc ON webapp USING gin (doc /* jsonb_ops */);
+CREATE INDEX i_webapp_doc_path ON webapp USING gin (doc jsonb_path_ops);
+explain select doc->'active' from webapp where doc @> '{"name" : "Bill"}'::jsonb;
+                      QUERY PLAN                       
+-------------------------------------------------------
+ Seq Scan on webapp  (cost=0.00..1.03 rows=1 width=32)
+   Filter: (doc @> '{"name": "Bill"}'::jsonb)
+(2 rows)
+
