@@ -5,6 +5,8 @@
 
 A PostgreSQL extension to analyze queries and give indexing advice.
 
+## Note: This is no longer updated - please see: https://github.com/HypoPG/hypopg
+
 ## Introduction ##
 The index advisor uses the virtual index framework/support built into PG
 to provide a list of "candidates" for the query engine to choose from.  
